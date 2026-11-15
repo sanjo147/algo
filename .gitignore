@@ -5,8 +5,8 @@ config.yaml
 # data
 *.db
 *.db-journal
-data/
-reports/
+/data/
+/reports/
 *.csv
 
 # python
@@ -27,4 +27,4 @@ htmlcov/
 Thumbs.db
 
 # logs
-logs/
+/logs/
