@@ -6,12 +6,14 @@ import sys
 
 from loguru import logger
 
-from sanjotracker.config import PROJECT_ROOT
+from sanjotracker.config import PROJECT_ROOT, get_config
 
 
-def setup_logging(level: str = "INFO", to_file: bool = True) -> None:
-    """Console logging at `level`, plus a rotating file in logs/ at DEBUG."""
-    logger.remove()
+def setup_logging(level: str | None = None, to_file: bool = True) -> None:
+    """Console logging at `level` (default: app.log_level from config), plus a
+    rotating DEBUG file in logs/. Call it first thing in every script."""
+    logger.remove()  # before loading config, so its debug line isn't printed raw
+    level = level or get_config().app.log_level
     logger.add(
         sys.stderr,
         level=level,

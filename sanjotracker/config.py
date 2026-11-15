@@ -90,6 +90,11 @@ class BreakoutConfig(BaseModel):
     failed_within_bars: int = 3
     trend_ema_fast: int = 20
     trend_ema_slow: int = 50
+    retest_within_bars: int = 10
+    min_zone_strength: float = 30
+    min_zone_touches: int = 2
+    reference_min_strength: float = 50
+    scan_history_bars: int = 1500
 
 
 class RegimeConfig(BaseModel):
@@ -98,6 +103,8 @@ class RegimeConfig(BaseModel):
     adx_ranging: float = 20
     vol_lookback_days: int = 252
     benchmark_ema: int = 200
+    vol_low_pct: float = 0.25
+    vol_high_pct: float = 0.75
 
 
 class NseCosts(BaseModel):

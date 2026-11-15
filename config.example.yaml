@@ -74,6 +74,11 @@ breakout:
   failed_within_bars: 3
   trend_ema_fast: 20
   trend_ema_slow: 50
+  retest_within_bars: 10       # retest must come within N bars of the breakout
+  min_zone_strength: 30        # pivot zones weaker than this are ignored
+  min_zone_touches: 2          # ...and so are pivot zones touched only once
+  reference_min_strength: 50   # prev week/month, 52w, POC pass; prev day / round don't
+  scan_history_bars: 1500      # bars loaded per symbol for the scan
 
 regime:
   adx_period: 14
@@ -81,6 +86,8 @@ regime:
   adx_ranging: 20
   vol_lookback_days: 252
   benchmark_ema: 200
+  vol_low_pct: 0.25            # ATR% in bottom 25% of the last year = low volatility
+  vol_high_pct: 0.75
 
 # ---------------------------------------------------------------- costs
 # Fractions, e.g. 0.001 = 0.1 %. Check your broker's current charge sheet.

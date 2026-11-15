@@ -39,6 +39,11 @@ def market_of(symbol: str) -> str:
     return "crypto" if "/" in symbol else "nse"
 
 
+def session_tz_for(symbol: str) -> str:
+    """Timezone whose calendar day defines a 'session' (VWAP reset, previous-day levels)."""
+    return "UTC" if market_of(symbol) == "crypto" else "Asia/Kolkata"
+
+
 class Updater:
     """Keeps the CandleStore current using one DataProvider per market."""
 

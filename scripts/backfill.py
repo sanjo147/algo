@@ -29,8 +29,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    setup_logging()
     cfg = get_config()
-    setup_logging(cfg.app.log_level)
 
     if args.symbols:
         symbols = list(args.symbols)

@@ -21,4 +21,4 @@ python-telegram-bot>=21.0
 # Dashboard & charts
 streamlit>=1.38
 plotly>=5.22
-kaleido==0.2.1
+kaleido>=1.0  # PNG export (uses your installed Chrome/Edge)
