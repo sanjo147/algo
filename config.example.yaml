@@ -1,0 +1,125 @@
+# SanjoTracker configuration.
+# Copy to config.yaml (git-ignored) and edit. Secrets go in .env, never here.
+
+app:
+  timezone_display: Asia/Kolkata   # all data is stored in UTC
+  db_path: data/sanjotracker.db
+  log_level: INFO
+
+# ---------------------------------------------------------------- watchlist
+watchlist:
+  nse:
+    - RELIANCE.NS
+    - TCS.NS
+    - HDFCBANK.NS
+    - INFY.NS
+    - ICICIBANK.NS
+    - SBIN.NS
+    - ITC.NS
+    - LT.NS
+    - BHARTIARTL.NS
+    - TMPV.NS        # Tata Motors Passenger Vehicles (old TATAMOTORS.NS, post-demerger). Verified in Phase 1.
+  crypto:
+    - BTC/USDT
+    - ETH/USDT
+    - SOL/USDT
+    - BNB/USDT
+    - XRP/USDT
+
+benchmarks:
+  nse: ^NSEI
+  crypto: BTC/USDT
+
+# ---------------------------------------------------------------- providers
+# Swap a market to a paid broker later by changing only this block.
+providers:
+  nse: yfinance_nse
+  crypto: binance_ccxt
+
+timeframes: [5m, 15m, 1h, 1d, 1w]
+
+styles:
+  swing:
+    primary: 1d
+    trend: 1w
+  intraday:
+    primary: 15m
+    entry: 5m
+    trend: 1h
+
+# ---------------------------------------------------------------- market hours
+nse_market:
+  open: "09:15"     # IST
+  close: "15:30"    # IST
+  weekdays: [0, 1, 2, 3, 4]   # Mon–Fri
+  # Trading holidays (YYYY-MM-DD). Copy the official list from
+  # nseindia.com > Resources > Exchange Communication > Holidays each year.
+  holidays:
+    - "2026-12-25"
+    - "2027-01-26"
+
+# ---------------------------------------------------------------- analysis
+levels:
+  pivot_left: 5
+  pivot_right: 5
+  zone_width_atr: 0.5
+  recency_half_life_bars: 100
+  round_number_step_pct: 1.0
+
+breakout:
+  approach_atr: 0.5
+  volume_mult: 1.5
+  volume_ma_bars: 20
+  min_body_atr: 0.5
+  failed_within_bars: 3
+  trend_ema_fast: 20
+  trend_ema_slow: 50
+
+regime:
+  adx_period: 14
+  adx_trending: 25
+  adx_ranging: 20
+  vol_lookback_days: 252
+  benchmark_ema: 200
+
+# ---------------------------------------------------------------- costs
+# Fractions, e.g. 0.001 = 0.1 %. Check your broker's current charge sheet.
+costs:
+  nse_intraday:
+    brokerage_pct: 0.0003       # 0.03 %
+    brokerage_max_per_order: 20 # ₹ cap per executed order
+    stt_sell_pct: 0.00025       # sell side only
+    exchange_txn_pct: 0.0000297
+    sebi_pct: 0.000001          # ₹10 per crore
+    stamp_buy_pct: 0.00003      # buy side only
+    gst_pct: 0.18               # on brokerage + exchange + SEBI
+    slippage_pct: 0.0005
+  nse_delivery:
+    brokerage_pct: 0.0
+    brokerage_max_per_order: 0
+    stt_buy_pct: 0.001
+    stt_sell_pct: 0.001
+    exchange_txn_pct: 0.0000297
+    sebi_pct: 0.000001
+    stamp_buy_pct: 0.00015
+    gst_pct: 0.18
+    slippage_pct: 0.0005
+  binance_spot:
+    maker_pct: 0.001
+    taker_pct: 0.001
+    slippage_pct: 0.0005
+
+# ---------------------------------------------------------------- alerts
+alerts:
+  telegram_enabled: true
+  cooldown_minutes: 240
+  min_confidence: 60
+  quiet_hours:
+    enabled: false
+    start: "23:00"   # IST
+    end: "07:00"
+  daily_summary_time: "15:45"   # IST, after NSE close
+
+backtest:
+  initial_capital: 100000
+  risk_per_trade_pct: 1.0
