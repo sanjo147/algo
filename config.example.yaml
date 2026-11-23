@@ -126,6 +126,9 @@ alerts:
     start: "23:00"   # IST
     end: "07:00"
   daily_summary_time: "15:45"   # IST, after NSE close
+  # which events may alert (drop "approaching" if it gets noisy)
+  events: [breakout, breakdown, retest, failed_breakout, failed_breakdown, approaching]
+  send_charts: true              # attach a PNG chart (needs Chrome or Edge installed)
 
 backtest:
   initial_capital: 100000

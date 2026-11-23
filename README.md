@@ -15,7 +15,7 @@ strategy backtests, and alerts to Telegram and a Streamlit dashboard.
 | 1 | Data layer (providers, SQLite store, updater) | ✅ |
 | 2 | Indicators + support/resistance | ✅ |
 | 3 | Breakout scanner + regime | ✅ |
-| 4 | Alerts + scheduler | ⏳ |
+| 4 | Alerts + scheduler | ✅ |
 | 5 | Strategies + backtester | ⏳ |
 | 6 | Streamlit dashboard | ⏳ |
 | 7 | Paper trading + journal | ⏳ |
@@ -116,7 +116,76 @@ pass `--all`. All thresholds live in `config.yaml` under `breakout:` and `regime
 No lookahead: an event on bar t only uses zones that existed before bar t, bar t's
 own close/volume, and higher-timeframe bars that had closed by then.
 
-More commands (scheduler, backtest) are added phase by phase.
+## Telegram alerts + scheduler (Phase 4)
+
+### 1. Create your bot (2 minutes)
+
+1. In Telegram, open **@BotFather** → send `/newbot` → pick a name and a username
+   ending in `bot` (e.g. `sanjo_tracker_bot`). BotFather replies with a **token**
+   like `123456789:AAH...`. Treat it like a password.
+2. Open your new bot's chat and press **Start** (send it any message), so it is
+   allowed to message you.
+3. Get your **chat ID**: open
+   `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` in your browser and find
+   `"chat":{"id":123456789`. (Or message **@userinfobot**, which replies with your id.)
+4. Copy `.env.example` to `.env` and fill in:
+   ```
+   TELEGRAM_BOT_TOKEN=123456789:AAH...
+   TELEGRAM_CHAT_ID=123456789
+   ```
+5. Test it:
+   ```bash
+   python scripts/run_scheduler.py --test-telegram
+   ```
+
+The bot answers **only your chat ID**. Commands: `/start`, `/watchlist`,
+`/add TCS.NS`, `/remove TCS.NS`, `/levels RELIANCE.NS`, `/status`.
+`/add` checks that the ticker returns data first. It edits only the `watchlist:`
+section of `config.yaml` (created from the example if missing; the old file is
+kept as `config.yaml.bak`).
+
+### 2. Run the scheduler
+
+```bash
+python scripts/run_scheduler.py --keep-awake
+```
+
+| Job | When (IST) | Scan |
+|---|---|---|
+| nse_intraday | Mon–Fri 09:32–15:32, every 15 min | 15m bars, 1h trend |
+| nse_swing | Mon–Fri 15:46 + daily summary | 1d bars, 1w trend |
+| crypto_intraday | every 15 min, 24/7 | 15m bars, 1h trend |
+| crypto_swing | daily 05:35 (after the 00:00 UTC close) | 1d bars, 1w trend |
+
+NSE jobs skip weekends and `nse_market.holidays`. Keep that list updated each year
+from the NSE holiday calendar.
+
+Try one job right now without waiting: `python scripts/run_scheduler.py --once crypto_intraday`
+(add `--no-telegram` to only log).
+
+Alert rules (`alerts:` in config): confidence ≥ `min_confidence` (60), the same
+symbol + timeframe + event + zone at most once per `cooldown_minutes` (240), never
+twice for the same bar, optional quiet hours (stored for the dashboard, not sent).
+Every alert is saved in the `alerts` table, which the dashboard reads in Phase 6.
+
+### 3. Keep it running on a laptop
+
+- `--keep-awake` stops Windows from sleeping **while the scheduler runs**. Normal
+  sleep comes back when you stop it. Closing the lid can still sleep the laptop:
+  Control Panel → Power Options → "Choose what closing the lid does" → *Do nothing*
+  (when plugged in).
+- Keep it plugged in. If it sleeps anyway, missed scans are skipped (a 15-min scan
+  runs late only if the laptop wakes within 10 min; daily scans within 1 hour).
+- Start on login: Task Scheduler → *Create Basic Task* → trigger *When I log on* →
+  action *Start a program*:
+  - Program: `D:\algo\sanjotracker\.venv\Scripts\pythonw.exe`
+  - Arguments: `scripts\run_scheduler.py --keep-awake`
+  - Start in: `D:\algo\sanjotracker`
+
+  (`pythonw` runs without a console window; logs go to `logs\sanjotracker.log`.)
+- Check it's alive any time with `/status` in Telegram.
+
+More commands (backtest) are added phase by phase.
 
 ## Layout
 

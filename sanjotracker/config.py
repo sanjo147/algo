@@ -145,6 +145,17 @@ class AlertsConfig(BaseModel):
     min_confidence: int = Field(60, ge=0, le=100)
     quiet_hours: QuietHours = Field(default_factory=QuietHours)
     daily_summary_time: time = time(15, 45)
+    events: list[str] = Field(
+        default_factory=lambda: [
+            "breakout",
+            "breakdown",
+            "retest",
+            "failed_breakout",
+            "failed_breakdown",
+            "approaching",
+        ]
+    )
+    send_charts: bool = True
 
 
 class BacktestConfig(BaseModel):
@@ -225,3 +236,41 @@ def get_config() -> Config:
 def get_secrets() -> Secrets:
     """Cached secrets from .env / environment."""
     return Secrets()
+
+
+def _watchlist_block(nse: list[str], crypto: list[str], comments: dict[str, str]) -> str:
+    lines = ["watchlist:"]
+    for name, syms in (("nse", nse), ("crypto", crypto)):
+        lines.append(f"  {name}:" if syms else f"  {name}: []")
+        for s in syms:
+            c = comments.get(s)
+            lines.append(f"    - {s}" + (f"        # {c}" if c else ""))
+    return "\n".join(lines) + "\n"
+
+
+def save_watchlist(nse: list[str], crypto: list[str], path: str | Path | None = None) -> Path:
+    """Rewrite only the `watchlist:` block of config.yaml (other comments are kept).
+
+    If config.yaml doesn't exist yet it is created from config.example.yaml.
+    A copy of the previous file is kept as config.yaml.bak.
+    """
+    import re
+    import shutil
+
+    target = Path(path) if path else PROJECT_ROOT / "config.yaml"
+    if not target.exists():
+        shutil.copyfile(PROJECT_ROOT / "config.example.yaml", target)
+    text = target.read_text(encoding="utf-8")
+    m = re.search(r"^watchlist:[^\n]*\n(?:(?:[ \t]+[^\n]*|[ \t]*)\n)*", text, flags=re.M)
+    if m is None:
+        raise ValueError(f"no top-level 'watchlist:' section in {target}")
+    comments = dict(re.findall(r"^\s+-\s+(\S+)\s+#\s*(.*)$", m.group(0), flags=re.M))
+    block = _watchlist_block(nse, crypto, comments)
+    trailing = "\n" if m.group(0).endswith("\n\n") else ""
+    new = text[: m.start()] + block + trailing + text[m.end() :]
+    Config.model_validate(yaml.safe_load(new))  # never write a config that won't load
+    shutil.copyfile(target, target.with_suffix(".yaml.bak"))
+    target.write_text(new, encoding="utf-8")
+    get_config.cache_clear()
+    logger.info("watchlist saved to {} ({} NSE, {} crypto)", target, len(nse), len(crypto))
+    return target

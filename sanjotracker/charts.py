@@ -39,10 +39,16 @@ def levels_chart(
     is_nse: bool = True,
     intraday: bool = False,
     max_zones: int = 8,
+    markers: pd.DataFrame | None = None,
+    height: int = 800,
+    show_reference: bool = True,
+    highlight: tuple[float, float, str] | None = None,
 ) -> go.Figure:
     """Candlestick (+ volume, if any) with pivot zones shaded and reference levels dotted.
 
     Only zones/levels that overlap the plotted price range are drawn.
+    `markers` (optional): columns timestamp, price, label, direction ("up"/"down")
+    for breakout/retest/... events.
     """
     d = df.copy()
     d["x"] = pd.to_datetime(d["timestamp"], utc=True).dt.tz_convert(display_tz).dt.tz_localize(None)
@@ -111,7 +117,8 @@ def levels_chart(
             annotation_font_size=10,
             annotation_font_color=f"rgb({rgb})",
         )
-    for r in visible[visible["source"] != "pivot"].itertuples():
+    refs = visible[visible["source"] != "pivot"] if show_reference else visible.iloc[0:0]
+    for r in refs.itertuples():
         mid = (r.zone_low + r.zone_high) / 2
         fig.add_hline(
             y=mid,
@@ -146,14 +153,89 @@ def levels_chart(
                 col=1,
             )
 
+    if highlight is not None:
+        lo_h, hi_h, label = highlight
+        fig.add_hrect(
+            y0=lo_h,
+            y1=hi_h,
+            row=1,
+            col=1,
+            line_width=1,
+            line_color="rgba(255, 213, 79, 0.9)",
+            fillcolor="rgba(255, 213, 79, 0.25)",
+            annotation_text=label,
+            annotation_position="left",
+            annotation_font_size=11,
+            annotation_font_color="#ffd54f",
+        )
+
+    if markers is not None and not markers.empty:
+        mk = markers.copy()
+        mk["x"] = (
+            pd.to_datetime(mk["timestamp"], utc=True).dt.tz_convert(display_tz).dt.tz_localize(None)
+        )
+        for direction, symbol, color in (("up", "star", "#ffd54f"), ("down", "x", "#ff8a65")):
+            k = mk[mk["direction"] == direction]
+            if k.empty:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=k["x"],
+                    y=k["price"],
+                    mode="markers+text",
+                    text=k["label"],
+                    textposition="top center" if direction == "up" else "bottom center",
+                    textfont={"size": 11, "color": color},
+                    name=f"events {direction}",
+                    marker={"symbol": symbol, "size": 14, "color": color},
+                ),
+                row=1,
+                col=1,
+            )
+
     fig.update_layout(
         title=title,
         template="plotly_dark",
-        height=800,
+        height=height,
         xaxis_rangeslider_visible=False,
-        legend={"orientation": "h", "y": 1.02, "x": 0},
+        legend={"orientation": "h", "y": 1.0, "x": 0, "yanchor": "bottom"},
         margin={"l": 60, "r": 110, "t": 70, "b": 30},
     )
     if is_nse:
         fig.update_xaxes(rangebreaks=_nse_rangebreaks(d["x"], intraday))
     return fig
+
+
+def event_figure(
+    df: pd.DataFrame,
+    levels: pd.DataFrame,
+    event,  # noqa: ANN001  (analysis.breakout.Event; untyped to avoid an import cycle)
+    *,
+    bars: int = 120,
+    display_tz: str = "Asia/Kolkata",
+    is_nse: bool = True,
+) -> go.Figure:
+    """Small chart for one alert: the last `bars` candles up to the event bar."""
+    upto = df[df["timestamp"] <= pd.Timestamp(event.bar_ts)].tail(bars).reset_index(drop=True)
+    markers = pd.DataFrame(
+        {
+            "timestamp": [event.bar_ts],
+            "price": [event.price],
+            "label": [event.event.value.replace("_", " ")],
+            "direction": [event.direction],
+        }
+    )
+    title = f"{event.symbol} · {event.timeframe} · {event.event.value} ({event.confidence})"
+    return levels_chart(
+        upto,
+        levels,
+        title=title,
+        display_tz=display_tz,
+        is_nse=is_nse,
+        intraday=event.timeframe in ("5m", "15m", "1h"),
+        max_zones=4,
+        markers=markers,
+        height=500,
+        show_reference=False,
+        highlight=(event.zone_low, event.zone_high, f"{event.zone_source} zone"),
+    )
