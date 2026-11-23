@@ -161,6 +161,13 @@ class AlertsConfig(BaseModel):
 class BacktestConfig(BaseModel):
     initial_capital: float = 100_000
     risk_per_trade_pct: float = 1.0
+    min_trades: int = 20  # fewer trades than this = not ranked on the leaderboard
+    min_bars: int = 300  # skip symbol/timeframes with less history
+    monte_carlo_runs: int = 1000
+    walkforward_windows: int = 5
+    walkforward_train_ratio: float = 2.0  # train window = 2 x test window
+    walkforward_objective: str = "sharpe"
+    risk_free_pct: float = 0.0  # annual, for Sharpe/Sortino (e.g. 6.5 for Indian T-bills)
 
 
 class Config(BaseModel):

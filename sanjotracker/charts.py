@@ -239,3 +239,51 @@ def event_figure(
         show_reference=False,
         highlight=(event.zone_low, event.zone_high, f"{event.zone_source} zone"),
     )
+
+
+def equity_chart(
+    equity: pd.Series,
+    close: pd.Series | None = None,
+    *,
+    title: str = "Equity",
+    display_tz: str = "Asia/Kolkata",
+    height: int = 600,
+) -> go.Figure:
+    """Equity curve vs buy & hold (scaled to the same start) with a drawdown panel."""
+    x = equity.index.tz_convert(display_tz).tz_localize(None)
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.04
+    )
+    fig.add_trace(
+        go.Scatter(x=x, y=equity, name="strategy", line={"color": "#42a5f5", "width": 2}),
+        row=1,
+        col=1,
+    )
+    if close is not None and len(close):
+        bh = close / close.iloc[0] * equity.iloc[0]
+        fig.add_trace(
+            go.Scatter(x=x, y=bh, name="buy & hold", line={"color": f"rgb({GREY})", "width": 1}),
+            row=1,
+            col=1,
+        )
+    dd = (equity / equity.cummax() - 1) * 100
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=dd,
+            name="drawdown %",
+            fill="tozeroy",
+            line={"color": f"rgb({RED})", "width": 1},
+        ),
+        row=2,
+        col=1,
+    )
+    fig.update_layout(
+        title=title,
+        template="plotly_dark",
+        height=height,
+        legend={"orientation": "h", "y": 1.0, "x": 0, "yanchor": "bottom"},
+        margin={"l": 60, "r": 30, "t": 70, "b": 30},
+    )
+    fig.update_yaxes(title_text="drawdown %", row=2, col=1)
+    return fig

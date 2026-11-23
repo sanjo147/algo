@@ -16,7 +16,7 @@ strategy backtests, and alerts to Telegram and a Streamlit dashboard.
 | 2 | Indicators + support/resistance | ✅ |
 | 3 | Breakout scanner + regime | ✅ |
 | 4 | Alerts + scheduler | ✅ |
-| 5 | Strategies + backtester | ⏳ |
+| 5 | Strategies + backtester | ✅ |
 | 6 | Streamlit dashboard | ⏳ |
 | 7 | Paper trading + journal | ⏳ |
 
@@ -185,7 +185,55 @@ Every alert is saved in the `alerts` table, which the dashboard reads in Phase 6
   (`pythonw` runs without a console window; logs go to `logs\sanjotracker.log`.)
 - Check it's alive any time with `/status` in Telegram.
 
-More commands (backtest) are added phase by phase.
+## Backtesting (Phase 5)
+
+```bash
+python scripts/run_backtest.py --list                          # strategies + parameters
+python scripts/run_backtest.py sr_breakout RELIANCE.NS 1d      # one backtest
+python scripts/run_backtest.py ema_crossover BTC/USDT 1h --param fast=10 --plot
+python scripts/run_backtest.py sr_breakout RELIANCE.NS 1d --walkforward
+python scripts/run_backtest.py --leaderboard                   # everything, ~1 min
+```
+
+| Strategy | Idea | Timeframes |
+|---|---|---|
+| sr_breakout | close through a strong S/R zone on volume (same rules as the scanner) | 15m, 1h, 1d |
+| ema_crossover | EMA 20/50 cross, ATR stop, exit on the opposite cross | all |
+| rsi_mean_reversion | RSI < 30 above the 200 EMA (and mirror), exit on RSI recovery | all |
+| orb_intraday | first close outside the 09:15–09:30 range, NSE only | 5m, 15m |
+| vwap_pullback | trend + dip to session VWAP that closes back on the trend side | 5m, 15m |
+
+How the engine works:
+
+- Signals use bar t's close; orders fill at bar t+1's **open** with slippage.
+- Every trade pays the fees in `costs:` (NSE delivery / intraday / Binance).
+- Stops and targets trigger inside the bar. If a bar hits both, the stop counts.
+- Each trade risks 1% of equity, with no leverage.
+- Shorts only on NSE intraday, which is squared off at 15:30.
+
+Output:
+
+- **Metrics:** CAGR, Sharpe, Sortino, Calmar, max drawdown and its duration, win
+  rate, profit factor, expectancy in R, exposure, and the result vs buy & hold.
+- **Regime breakdown:** trend, volatility and market at the signal bar.
+- **Monte Carlo:** drawdown percentiles from 1000 shuffles of the trade order.
+
+Results go to the `backtest_runs` / `backtest_trades` tables and
+`reports/leaderboard_*.csv`.
+
+How to read it honestly:
+
+- The **leaderboard uses default parameters only**. Tuning on the same data you
+  report is curve-fitting.
+- To tune, use `--walkforward`: it picks parameters on past windows and scores
+  them on the next, unseen window. Expect the out-of-sample result to be much
+  worse than the full-history one. That gap is the overfitting.
+- `<20 trades` or `<1 year of data` rows are shown but not ranked. Free intraday
+  data is only ~59 days, too short to judge.
+- Fees matter. Binance spot costs ~0.30% per round trip; NSE delivery ~0.32%.
+  On a 15m chart, that can be most of a stop distance.
+
+More commands (dashboard) are added phase by phase.
 
 ## Layout
 

@@ -127,39 +127,72 @@ def cluster_prices(prices: np.ndarray, max_width: float) -> list[np.ndarray]:
     return [np.array(g) for g in groups]
 
 
+def zone_arrays(
+    prices: np.ndarray,
+    idx: np.ndarray,
+    volumes: np.ndarray,
+    last_i: int,
+    avg_vol: float,
+    atr_now: float,
+    cfg: LevelsConfig,
+) -> dict[str, np.ndarray]:
+    """Numpy core of the zone builder (fast enough to call on every backtest bar).
+
+    Inputs are the confirmed pivots' price, bar index and volume. Returns arrays
+    low, high, touches, score (raw), last_idx (newest pivot in the zone).
+    """
+    width = cfg.zone_width_atr * atr_now
+    min_width = 0.2 * atr_now  # a single-pivot zone still needs some thickness
+    groups = cluster_prices(prices, width)
+    k = len(groups)
+    out = {
+        "low": np.empty(k),
+        "high": np.empty(k),
+        "touches": np.empty(k, dtype=int),
+        "score": np.empty(k),
+        "last_idx": np.empty(k, dtype=int),
+    }
+    for j, g in enumerate(groups):
+        lo, hi = float(prices[g].min()), float(prices[g].max())
+        if hi - lo < min_width:
+            mid = (lo + hi) / 2
+            lo, hi = mid - min_width / 2, mid + min_width / 2
+        recency = float(np.mean(0.5 ** ((last_i - idx[g]) / cfg.recency_half_life_bars)))
+        rel_vol = float(volumes[g].mean()) / avg_vol if avg_vol > 0 else 1.0
+        out["low"][j], out["high"][j] = lo, hi
+        out["touches"][j] = len(g)
+        out["score"][j] = len(g) * recency * rel_vol
+        out["last_idx"][j] = int(idx[g].max())
+    return out
+
+
 def _pivot_zones(
     df: pd.DataFrame, pivots: pd.DataFrame, cfg: LevelsConfig, atr_now: float
 ) -> pd.DataFrame:
     if pivots.empty or not np.isfinite(atr_now) or atr_now <= 0:
         return empty_levels()
-    width = cfg.zone_width_atr * atr_now
-    min_width = 0.2 * atr_now  # a single-pivot zone still needs some thickness
-    last_i = len(df) - 1
     close = float(df["close"].iloc[-1])
-    avg_vol = float(df["volume"].mean())
-
-    rows = []
-    for g in cluster_prices(pivots["price"].to_numpy(dtype=float), width):
-        p = pivots.iloc[g]
-        lo, hi = float(p["price"].min()), float(p["price"].max())
-        if hi - lo < min_width:
-            mid = (lo + hi) / 2
-            lo, hi = mid - min_width / 2, mid + min_width / 2
-        ages = last_i - p["idx"].to_numpy()
-        recency = float(np.mean(0.5 ** (ages / cfg.recency_half_life_bars)))
-        rel_vol = float(p["volume"].mean()) / avg_vol if avg_vol > 0 else 1.0
-        rows.append(
-            {
-                "zone_low": lo,
-                "zone_high": hi,
-                "type": "S" if close >= (lo + hi) / 2 else "R",
-                "touches": len(p),
-                "score": len(p) * recency * rel_vol,
-                "last_touch_ts": p["pivot_ts"].max(),
-                "source": "pivot",
-            }
-        )
-    zones = pd.DataFrame(rows)
+    z = zone_arrays(
+        pivots["price"].to_numpy(dtype=float),
+        pivots["idx"].to_numpy(dtype=int),
+        pivots["volume"].to_numpy(dtype=float),
+        len(df) - 1,
+        float(df["volume"].mean()),
+        atr_now,
+        cfg,
+    )
+    ts_by_idx = dict(zip(pivots["idx"].to_numpy(dtype=int), pivots["pivot_ts"], strict=True))
+    zones = pd.DataFrame(
+        {
+            "zone_low": z["low"],
+            "zone_high": z["high"],
+            "type": np.where(close >= (z["low"] + z["high"]) / 2, "S", "R"),
+            "touches": z["touches"],
+            "score": z["score"],
+            "last_touch_ts": [ts_by_idx[i] for i in z["last_idx"]],
+            "source": "pivot",
+        }
+    )
     zones["strength"] = (100 * zones["score"] / zones["score"].max()).round(1)
     return zones
 

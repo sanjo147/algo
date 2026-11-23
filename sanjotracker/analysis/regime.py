@@ -170,3 +170,25 @@ def current_regime(
         return Regime()
     at = pd.Timestamp(df["timestamp"].iloc[-1]) + TIMEFRAME_DELTAS[timeframe]
     return regime_at(regime_frame(df, cfg), len(df) - 1, at, bench, cfg)
+
+
+def market_regime_at_times(
+    bench: pd.DataFrame | None,
+    times: pd.Series | pd.DatetimeIndex,
+    ema_n: int = 200,
+    timeframe: str = "1d",
+) -> np.ndarray:
+    """Vectorised market_regime(): label for each time in `times` (fast for backtests).
+
+    For each time, uses the last benchmark bar that had CLOSED by then.
+    """
+    t = pd.to_datetime(pd.Series(times), utc=True).to_numpy()
+    out = np.full(len(t), "unknown", dtype=object)
+    if bench is None or len(bench) < ema_n:
+        return out
+    closes = (pd.to_datetime(bench["timestamp"], utc=True) + TIMEFRAME_DELTAS[timeframe]).to_numpy()
+    bull = (bench["close"] > ema(bench["close"], ema_n)).to_numpy()
+    pos = np.searchsorted(closes, t, side="right") - 1  # last bench bar closed by t
+    ok = pos >= ema_n - 1
+    out[ok] = np.where(bull[pos[ok]], "bull", "bear")
+    return out

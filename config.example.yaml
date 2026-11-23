@@ -132,4 +132,11 @@ alerts:
 
 backtest:
   initial_capital: 100000
-  risk_per_trade_pct: 1.0
+  risk_per_trade_pct: 1.0        # % of equity risked between entry and stop
+  min_trades: 20                 # fewer = shown but not ranked on the leaderboard
+  min_bars: 300
+  monte_carlo_runs: 1000
+  walkforward_windows: 5
+  walkforward_train_ratio: 2.0   # in-sample window = 2x out-of-sample window
+  walkforward_objective: sharpe  # sharpe | total_return | expectancy_r | profit_factor
+  risk_free_pct: 0.0             # annual %, for Sharpe/Sortino
