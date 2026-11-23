@@ -105,8 +105,12 @@ def run_backtest(
     end: int | None = None,
     benchmark_df: pd.DataFrame | None = None,
     regime_cfg: RegimeConfig | None = None,
+    close_at_end: bool = True,
 ) -> BacktestResult:
     """Backtest one strategy on one symbol/timeframe.
+
+    close_at_end=False leaves a still-open trade open and describes it in
+    meta["open_position"] (paper trading needs that; backtests close it).
 
     Bars [start, end) are traded and reported; bars before `start` are only
     warm-up history for indicators. Data after `end` is cut off BEFORE the
@@ -254,9 +258,29 @@ def run_backtest(
         else:
             equity[i] = cash
 
-    if pos is not None:
+    open_position = None
+    if pos is not None and close_at_end:
         close_pos(n - 1, c[n - 1], "end")
         equity[n - 1] = cash
+    elif pos is not None:
+        s = pos.signal_i
+        open_position = {
+            "direction": "long" if pos.direction == 1 else "short",
+            "signal_ts": ts.iloc[s],
+            "entry_ts": ts.iloc[pos.entry_i],
+            "entry_price": pos.entry_fill,
+            "stop": pos.stop,
+            "target": pos.target,
+            "qty": pos.qty,
+            "entry_fees": pos.entry_fees,
+            "risk_amount": abs(pos.entry_fill - pos.stop) * pos.qty,
+            "last_close": float(c[n - 1]),
+            "unrealized_pnl": pos.direction * (c[n - 1] - pos.entry_fill) * pos.qty
+            - pos.entry_fees,
+            "regime_trend": reg["trend"].iloc[s],
+            "regime_volatility": reg["volatility"].iloc[s],
+            "regime_market": market[s],
+        }
 
     idx = pd.DatetimeIndex(ts)
     rng = slice(start, n)
@@ -272,5 +296,10 @@ def run_backtest(
         equity=pd.Series(equity[rng], index=idx[rng], name="equity"),
         in_market=pd.Series(held[rng], index=idx[rng], name="in_market"),
         close=pd.Series(c[rng], index=idx[rng], name="close"),
-        meta={"allow_short": allow_short, "eod_exit": eod_exit, "bars": n - start},
+        meta={
+            "allow_short": allow_short,
+            "eod_exit": eod_exit,
+            "bars": n - start,
+            "open_position": open_position,
+        },
     )

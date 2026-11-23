@@ -305,3 +305,42 @@ def latest_leaderboard(db: str) -> tuple[pd.DataFrame, str | None]:
     out = pd.concat([runs[["run_id", "strategy", "symbol", "timeframe"]], m], axis=1)
     out["mc_dd_p5"] = mc.get("dd_p5")
     return out, batch
+
+
+# ------------------------------------------------------------------ paper trading
+
+
+@st.cache_resource
+def _paper_book(db_file: str):  # noqa: ANN202
+    from sanjotracker.paper.book import PaperBook
+
+    return PaperBook(_store(db_file).engine)
+
+
+def paper_book():  # noqa: ANN201
+    return _paper_book(db_key())
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def paper_account(db: str, capital: float) -> dict:
+    from sanjotracker.paper.trader import paper_summary
+
+    return paper_summary(_paper_book(db), _store(db), capital)
+
+
+def paper_step(notify: bool = True) -> dict:
+    """Network + Telegram: fetch new candles and advance paper trades (button only)."""
+    from sanjotracker.alerts.telegram_bot import NullNotifier, build_notifier
+    from sanjotracker.paper.trader import PaperTrader
+
+    c = cfg()
+    up = build_updater(store(), {"nse": c.providers.nse, "crypto": c.providers.crypto})
+    notifier = build_notifier(c) if notify else NullNotifier()
+    res = PaperTrader(c, store(), notifier, up).run()
+    st.cache_data.clear()
+    return {
+        "setups": res.setups,
+        "opened": len(res.opened),
+        "closed": len(res.closed),
+        "errors": res.errors,
+    }

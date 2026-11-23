@@ -18,7 +18,7 @@ strategy backtests, and alerts to Telegram and a Streamlit dashboard.
 | 4 | Alerts + scheduler | ✅ |
 | 5 | Strategies + backtester | ✅ |
 | 6 | Streamlit dashboard | ✅ |
-| 7 | Paper trading + journal | ⏳ |
+| 7 | Paper trading + journal | ✅ |
 
 ## Setup
 
@@ -266,6 +266,43 @@ them so they never touch your real config or database:
 - `SANJOTRACKER_CONFIG`: another config file.
 - `SANJOTRACKER_DB`: another database file.
 
+## Paper trading + journal (Phase 7)
+
+Virtual trades only: nothing here can place a real order.
+
+```bash
+python scripts/run_paper.py            # fetch candles, step every setup, print the account
+python scripts/run_paper.py --show     # just print
+```
+
+The scheduler also steps paper trades after every scan and sends Telegram
+messages on each paper entry and exit. The daily summary includes the paper account.
+
+How it works:
+
+- Each setup (strategy × symbol × timeframe, under `paper: setups:` in
+  `config.yaml`) is replayed with the **backtest engine** over closed candles.
+  - It only trades bars that close **after the setup was first registered**, so
+    there are no back-dated trades.
+  - Same rules as backtests: fill at the next bar's open, full costs, and 1% risk
+    of the virtual capital per trade.
+  - The stop is 2 × ATR and the target 2R (`paper.stop_atr` / `paper.target_r`;
+    set either to `null` to use the strategy's own).
+- Each run, the replay is compared with the `paper_trades` table: new trades are
+  added and closed ones are recorded. Closed trades never change.
+- A test checks that stepping after every few new bars gives exactly the same
+  trades as a single replay, so paper results follow the backtest rules exactly.
+- Each setup sizes from the same virtual capital independently, so the total open
+  risk can add up across setups.
+
+Dashboard:
+
+- **Paper trading:** equity, realized and open P&L, open positions with stop and
+  target, P&L over time, results per setup, closed trades, and a chart of any trade.
+- **Journal:** select a trade to add notes, tags and a 1–5 star rating, then see
+  win rate and average R per tag (for example, do your "chased" trades lose?).
+  Journal entries are stored separately, so data refreshes never overwrite them.
+
 ## Layout
 
 ```
@@ -277,6 +314,7 @@ sanjotracker/
   strategies/       strategy implementations
   backtest/         engine, costs, metrics, walk-forward, Monte Carlo
   alerts/           rules, Telegram, dashboard feed
+  paper/            paper trader (replays strategies live) + trade journal
 app/                Streamlit dashboard
 scripts/            CLI entry points
 tests/              pytest

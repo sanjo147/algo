@@ -10,6 +10,7 @@ from sanjotracker.scheduler import IST, AlertService, build_scheduler, nse_intra
 from tests.test_alerts import make_event
 
 CFG = load_config(PROJECT_ROOT / "config.example.yaml")
+CFG.paper.enabled = False  # paper trading has its own tests (test_paper.py)
 
 
 def ist(y: int, mo: int, d: int, h: int, mi: int) -> datetime:

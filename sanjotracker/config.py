@@ -161,6 +161,40 @@ class AlertsConfig(BaseModel):
     send_charts: bool = True
 
 
+class PaperSetup(BaseModel):
+    """One paper-traded strategy. `symbols` may name a watchlist: "watchlist:nse",
+    "watchlist:crypto" or "watchlist" (both)."""
+
+    strategy: str
+    timeframe: str = "1d"
+    symbols: list[str] = Field(default_factory=lambda: ["watchlist"])
+    params: dict = Field(default_factory=dict)
+    stop_atr: float | None = None  # None -> paper.stop_atr
+    target_r: float | None = None  # None -> paper.target_r
+
+    @field_validator("timeframe")
+    @classmethod
+    def _check_tf(cls, v: str) -> str:
+        if v not in VALID_TIMEFRAMES:
+            raise ValueError(f"unknown timeframe {v!r}")
+        return v
+
+
+class PaperConfig(BaseModel):
+    enabled: bool = True
+    capital: float = 100_000  # virtual capital each setup sizes from
+    risk_per_trade_pct: float = 1.0
+    stop_atr: float | None = 2.0  # ATR stop distance; None = the strategy's own stop
+    target_r: float | None = 2.0  # target in R; None = the strategy's own target
+    telegram: bool = True  # notify entries/exits
+    setups: list[PaperSetup] = Field(
+        default_factory=lambda: [
+            PaperSetup(strategy="ema_crossover", timeframe="1d"),
+            PaperSetup(strategy="sr_breakout", timeframe="1d"),
+        ]
+    )
+
+
 class BacktestConfig(BaseModel):
     initial_capital: float = 100_000
     risk_per_trade_pct: float = 1.0
@@ -189,6 +223,7 @@ class Config(BaseModel):
     costs: Costs
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
+    paper: PaperConfig = Field(default_factory=PaperConfig)
 
     @field_validator("timeframes")
     @classmethod
@@ -302,6 +337,8 @@ def writable_config_path(path: str | Path | None = None) -> Path:
 
 
 def _yaml_scalar(v: object) -> str:
+    if v is None:
+        return "null"
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, time):

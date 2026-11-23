@@ -38,6 +38,18 @@ page = st.navigation(
             help="Run a strategy with costs: equity, drawdown, trades, regimes, parameter heatmap.",
         ),
         st.Page(
+            "app_pages/paper.py",
+            title="Paper trading",
+            icon=":material/receipt_long:",
+            help="Virtual account: open positions, closed trades and results per setup.",
+        ),
+        st.Page(
+            "app_pages/journal.py",
+            title="Journal",
+            icon=":material/edit_note:",
+            help="Notes, tags and ratings for any paper trade, and results by tag.",
+        ),
+        st.Page(
             "app_pages/settings.py",
             title="Settings",
             icon=":material/settings:",

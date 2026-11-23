@@ -140,3 +140,22 @@ backtest:
   walkforward_train_ratio: 2.0   # in-sample window = 2x out-of-sample window
   walkforward_objective: sharpe  # sharpe | total_return | expectancy_r | profit_factor
   risk_free_pct: 0.0             # annual %, for Sharpe/Sortino
+
+# ---------------------------------------------------------------- paper trading (Phase 7)
+# Virtual trades, never real orders. Each setup replays a strategy on closed
+# candles from the moment it was first seen, fills at the next bar's open,
+# pays the configured costs, and notifies Telegram on entry/exit.
+paper:
+  enabled: true
+  capital: 100000            # virtual capital each setup sizes from
+  risk_per_trade_pct: 1.0
+  stop_atr: 2.0              # stop = entry -/+ 2 x ATR (null = the strategy's own stop)
+  target_r: 2.0              # target = 2 x risk (null = the strategy's own exit)
+  telegram: true
+  setups:
+    - strategy: ema_crossover
+      timeframe: 1d
+      symbols: [watchlist]   # or watchlist:nse, watchlist:crypto, or tickers
+    - strategy: sr_breakout
+      timeframe: 1d
+      symbols: [watchlist]

@@ -87,3 +87,13 @@ def test_env_overrides_config_and_db(tmp_path, monkeypatch) -> None:  # noqa: AN
     monkeypatch.setenv(DB_ENV, str(tmp_path / "x.db"))
     cfg = load_config()
     assert cfg.db_file == tmp_path / "x.db"
+
+
+def test_update_config_values_writes_null(tmp_path) -> None:  # noqa: ANN001
+    from sanjotracker.config import update_config_values
+
+    p = tmp_path / "config.yaml"
+    p.write_text(EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
+    update_config_values({"paper.stop_atr": None}, p)
+    assert load_config(p).paper.stop_atr is None
+    assert "  stop_atr: null" in p.read_text(encoding="utf-8")

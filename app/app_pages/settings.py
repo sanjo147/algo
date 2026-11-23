@@ -71,7 +71,9 @@ with st.form("wl_form", border=True):
 # ------------------------------------------------------------------ thresholds
 with st.form("thr_form", border=True):
     st.subheader("Thresholds")
-    t_lv, t_bo, t_al, t_bt = st.tabs(["Levels", "Breakouts", "Alerts", "Backtest"])
+    t_lv, t_bo, t_al, t_bt, t_pp = st.tabs(
+        ["Levels", "Breakouts", "Alerts", "Backtest", "Paper trading"]
+    )
     new: dict[str, object] = {}
     with t_lv:
         cols = st.columns(4)
@@ -176,6 +178,44 @@ with st.form("thr_form", border=True):
         )
         new["backtest.walkforward_windows"] = cols[3].number_input(
             "Walk-forward windows", 2, 12, bt.walkforward_windows, key="s_wf"
+        )
+
+    with t_pp:
+        pp = c.paper
+        cols = st.columns(3, vertical_alignment="bottom")
+        new["paper.enabled"] = cols[0].toggle("Paper trading on", pp.enabled, key="s_pe")
+        new["paper.telegram"] = cols[1].toggle("Notify entries/exits", pp.telegram, key="s_pt")
+        cols = st.columns(4)
+        new["paper.capital"] = cols[0].number_input(
+            "Virtual capital", 1_000.0, 1e9, float(pp.capital), 10_000.0, key="s_pc"
+        )
+        new["paper.risk_per_trade_pct"] = cols[1].number_input(
+            "Risk per trade (%)", 0.1, 5.0, pp.risk_per_trade_pct, 0.1, key="s_prisk"
+        )
+        new["paper.stop_atr"] = cols[2].number_input(
+            "Stop (× ATR)",
+            0.5,
+            10.0,
+            pp.stop_atr,
+            0.5,
+            key="s_psa",
+            placeholder="strategy's own",
+            help="Empty = use each strategy's own stop.",
+        )
+        new["paper.target_r"] = cols[3].number_input(
+            "Target (R)",
+            0.5,
+            10.0,
+            pp.target_r,
+            0.5,
+            key="s_ptr",
+            placeholder="strategy's own",
+            help="Empty = use each strategy's own exit.",
+        )
+        st.caption(
+            "Which strategies, symbols and timeframes are paper traded is set under "
+            "`paper: setups:` in config.yaml. Changing stop/target starts new setups "
+            "(old trades are kept)."
         )
 
     if st.form_submit_button("Save thresholds", type="primary", icon=":material/save:"):

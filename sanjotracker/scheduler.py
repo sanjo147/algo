@@ -61,6 +61,8 @@ class RunInfo(BaseModel):
     sent: int = 0
     errors: dict[str, str] = {}
     skipped: str | None = None
+    paper_opened: int = 0
+    paper_closed: int = 0
 
 
 def nse_intraday_due(now: datetime, cfg: Config) -> str | None:
@@ -153,6 +155,7 @@ class AlertService:
                 logger.error("telegram send failed for {}: {}", ev.symbol, exc)
                 self.feed.mark_sent(alert_id, False, f"telegram error: {exc}")
 
+        self._paper_step(job, cfg, now, info)
         if job == "nse_swing":
             self.send_daily_summary(now, cfg)
         info.seconds = round((datetime.now(UTC) - t0).total_seconds(), 1)
@@ -167,6 +170,29 @@ class AlertService:
             len(info.errors),
         )
         return info
+
+    def _paper_step(self, job: str, cfg: Config, now: datetime, info: RunInfo) -> None:
+        """Advance paper trades for setups on this job's market and timeframes."""
+        if not cfg.paper.enabled:
+            return
+        style, market = JOBS[job]
+        st = getattr(cfg.styles, style)
+        try:
+            from sanjotracker.data.updater import build_updater
+            from sanjotracker.paper.trader import PaperTrader
+
+            updater = build_updater(
+                self.store, {"nse": cfg.providers.nse, "crypto": cfg.providers.crypto}
+            )
+            watch = {*cfg.watchlist.nse, *cfg.watchlist.crypto}
+            res = PaperTrader(cfg, self.store, self.notifier, updater, skip_update=watch).run(
+                timeframes={st.primary, st.trend}, markets={market}, now=now
+            )
+            info.paper_opened, info.paper_closed = len(res.opened), len(res.closed)
+            info.errors.update({f"paper {k}": v for k, v in res.errors.items()})
+        except Exception as exc:
+            logger.exception("paper step failed")
+            info.errors["paper"] = str(exc)
 
     # ------------------------------------------------------------------ summary / status
 
@@ -193,10 +219,29 @@ class AlertService:
                 lines.append(
                     f"{EMOJI.get(r.event, '')} {r.symbol} {r.timeframe} {r.event} · {r.confidence}"
                 )
+        lines += self._paper_summary_lines(cfg)
         problems = {k: v for i in self.last_runs.values() for k, v in i.errors.items()}
         if problems:
             lines += ["", f"⚠️ {len(problems)} data/scan problems (see logs)"]
         return "\n".join(lines)
+
+    def _paper_summary_lines(self, cfg: Config) -> list[str]:
+        if not cfg.paper.enabled:
+            return []
+        try:
+            from sanjotracker.paper.book import PaperBook
+            from sanjotracker.paper.trader import paper_summary
+
+            s = paper_summary(PaperBook(self.store.engine), self.store, cfg.paper.capital)
+        except Exception as exc:
+            logger.error("paper summary failed: {}", exc)
+            return []
+        return [
+            "",
+            f"📝 <b>Paper</b>: equity {s['equity']:,.0f} "
+            f"(realized {s['realized']:+,.0f}, open {s['unrealized']:+,.0f}) · "
+            f"{len(s['open'])} open, {len(s['closed'])} closed",
+        ]
 
     def send_daily_summary(self, now: datetime, cfg: Config) -> None:
         try:

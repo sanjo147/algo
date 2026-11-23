@@ -287,3 +287,72 @@ def equity_chart(
     )
     fig.update_yaxes(title_text="drawdown %", row=2, col=1)
     return fig
+
+
+def trade_figure(
+    df: pd.DataFrame,
+    trade: dict,
+    *,
+    display_tz: str = "Asia/Kolkata",
+    is_nse: bool = True,
+    bars_before: int = 60,
+    bars_after: int = 20,
+) -> go.Figure:
+    """Candles around one trade with entry/exit markers and stop/target lines."""
+    ts = pd.to_datetime(df["timestamp"], utc=True)
+    i0 = int(ts.searchsorted(pd.Timestamp(trade["entry_ts"])))
+    exit_ts = trade.get("exit_ts")
+    i1 = (
+        int(ts.searchsorted(pd.Timestamp(exit_ts)))
+        if exit_ts is not None and pd.notna(exit_ts)
+        else len(df) - 1
+    )
+    win = df.iloc[max(0, i0 - bars_before) : min(len(df), i1 + bars_after + 1)].reset_index(
+        drop=True
+    )
+    up = trade["direction"] == "long"
+    marks = [
+        {
+            "timestamp": trade["entry_ts"],
+            "price": trade["entry_price"],
+            "label": "entry",
+            "direction": "up" if up else "down",
+        }
+    ]
+    if exit_ts is not None and pd.notna(exit_ts):
+        marks.append(
+            {
+                "timestamp": exit_ts,
+                "price": trade["exit_price"],
+                "label": f"exit ({trade.get('exit_reason')})",
+                "direction": "down" if up else "up",
+            }
+        )
+    empty = pd.DataFrame(columns=["zone_low", "zone_high", "type", "touches", "strength", "source"])
+    fig = levels_chart(
+        win,
+        empty,
+        title=f"{trade['symbol']} · {trade['timeframe']} · {trade.get('label', '')}",
+        display_tz=display_tz,
+        is_nse=is_nse,
+        intraday=trade["timeframe"] in ("5m", "15m", "1h"),
+        markers=pd.DataFrame(marks),
+        height=480,
+    )
+    for y, name, color in (
+        (trade.get("stop"), "stop", RED),
+        (trade.get("target"), "target", GREEN),
+    ):
+        if y is not None and pd.notna(y):
+            fig.add_hline(
+                y=float(y),
+                row=1,
+                col=1,
+                line_dash="dash",
+                line_width=1,
+                line_color=f"rgb({color})",
+                annotation_text=name,
+                annotation_position="top left",
+                annotation_font_color=f"rgb({color})",
+            )
+    return fig
