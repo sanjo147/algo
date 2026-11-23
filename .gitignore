@@ -28,3 +28,6 @@ Thumbs.db
 
 # logs
 /logs/
+
+# Streamlit secrets (never commit)
+.streamlit/secrets.toml

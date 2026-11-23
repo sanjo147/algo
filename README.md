@@ -17,7 +17,7 @@ strategy backtests, and alerts to Telegram and a Streamlit dashboard.
 | 3 | Breakout scanner + regime | ✅ |
 | 4 | Alerts + scheduler | ✅ |
 | 5 | Strategies + backtester | ✅ |
-| 6 | Streamlit dashboard | ⏳ |
+| 6 | Streamlit dashboard | ✅ |
 | 7 | Paper trading + journal | ⏳ |
 
 ## Setup
@@ -55,7 +55,7 @@ Edit `config.yaml` (watchlist, thresholds, costs, holidays) and `.env`
 ```bash
 pytest -q                     # tests
 ruff check . && ruff format . # lint + format
-streamlit run app/Home.py     # dashboard (full version in Phase 6)
+streamlit run app/Home.py     # dashboard, opens http://localhost:8501
 ```
 
 ### Download market data
@@ -166,7 +166,7 @@ Try one job right now without waiting: `python scripts/run_scheduler.py --once c
 Alert rules (`alerts:` in config): confidence ≥ `min_confidence` (60), the same
 symbol + timeframe + event + zone at most once per `cooldown_minutes` (240), never
 twice for the same bar, optional quiet hours (stored for the dashboard, not sent).
-Every alert is saved in the `alerts` table, which the dashboard reads in Phase 6.
+Every alert is saved in the `alerts` table, which the dashboard's Alerts page shows.
 
 ### 3. Keep it running on a laptop
 
@@ -233,7 +233,38 @@ How to read it honestly:
 - Fees matter. Binance spot costs ~0.30% per round trip; NSE delivery ~0.32%.
   On a 15m chart, that can be most of a stop distance.
 
-More commands (dashboard) are added phase by phase.
+## Dashboard (Phase 6)
+
+Run it from the project root (so the dark theme in `.streamlit/config.toml` loads):
+
+```bash
+streamlit run app/Home.py
+```
+
+| Page | What's there |
+|---|---|
+| Alerts | NIFTY / BTC regime badges, live alert feed (refreshes every 60 s; click a row for the reasons and its chart), watchlist with 30-day sparklines and the nearest support/resistance |
+| Charts | Candlesticks with S/R zones, pivots, breakout/retest markers, stored alerts, optional reference levels / EMA 200 / Bollinger / VWAP, any symbol and timeframe |
+| Scanner | Swing or intraday scan with filters, plus symbols within X% of a strong level |
+| Backtest | One run with costs (metrics, equity vs buy & hold, trades, regimes, Monte Carlo, parameter heatmap), walk-forward, and the latest leaderboard |
+| Settings | Edit the watchlist and thresholds, see Telegram status (never the token), send a test message, see what data is stored |
+
+How the pages get their data:
+
+- They read the local database, so they open fast and work offline.
+- New candles are downloaded only when you press a **Fetch latest** button, or when the scheduler runs.
+
+How Settings saves:
+
+- It rewrites only the lines you changed in `config.yaml`, keeping your comments.
+- It keeps the previous file as `config.yaml.bak`.
+- It refuses values that wouldn't load.
+
+Two environment variables point the app (and scripts) at other files. Tests use
+them so they never touch your real config or database:
+
+- `SANJOTRACKER_CONFIG`: another config file.
+- `SANJOTRACKER_DB`: another database file.
 
 ## Layout
 

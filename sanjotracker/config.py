@@ -11,6 +11,9 @@ and CI run without any local setup. Secrets come only from environment / .env.
 
 from __future__ import annotations
 
+import os
+import re
+import shutil
 from datetime import date, time
 from functools import lru_cache
 from pathlib import Path
@@ -197,8 +200,9 @@ class Config(BaseModel):
 
     @property
     def db_file(self) -> Path:
-        """Absolute path to the SQLite DB (relative paths resolve from the project root)."""
-        p = Path(self.app.db_path)
+        """Absolute path to the SQLite DB (relative paths resolve from the project root).
+        $SANJOTRACKER_DB overrides it."""
+        p = Path(os.environ.get(DB_ENV) or self.app.db_path)
         return p if p.is_absolute() else PROJECT_ROOT / p
 
 
@@ -214,10 +218,16 @@ class Secrets(BaseSettings):
     anthropic_api_key: SecretStr | None = None
 
 
+CONFIG_ENV = "SANJOTRACKER_CONFIG"  # optional: use another config file
+DB_ENV = "SANJOTRACKER_DB"  # optional: use another SQLite file (tests, experiments)
+
+
 def resolve_config_path(path: str | Path | None = None) -> Path:
-    """Return the config file to use: explicit path > config.yaml > config.example.yaml."""
+    """Config file to use: explicit path > $SANJOTRACKER_CONFIG > config.yaml > example."""
     if path is not None:
         return Path(path)
+    if os.environ.get(CONFIG_ENV):
+        return Path(os.environ[CONFIG_ENV])
     local = PROJECT_ROOT / "config.yaml"
     if local.exists():
         return local
@@ -261,12 +271,7 @@ def save_watchlist(nse: list[str], crypto: list[str], path: str | Path | None = 
     If config.yaml doesn't exist yet it is created from config.example.yaml.
     A copy of the previous file is kept as config.yaml.bak.
     """
-    import re
-    import shutil
-
-    target = Path(path) if path else PROJECT_ROOT / "config.yaml"
-    if not target.exists():
-        shutil.copyfile(PROJECT_ROOT / "config.example.yaml", target)
+    target = writable_config_path(path)
     text = target.read_text(encoding="utf-8")
     m = re.search(r"^watchlist:[^\n]*\n(?:(?:[ \t]+[^\n]*|[ \t]*)\n)*", text, flags=re.M)
     if m is None:
@@ -280,4 +285,93 @@ def save_watchlist(nse: list[str], crypto: list[str], path: str | Path | None = 
     target.write_text(new, encoding="utf-8")
     get_config.cache_clear()
     logger.info("watchlist saved to {} ({} NSE, {} crypto)", target, len(nse), len(crypto))
+    return target
+
+
+def writable_config_path(path: str | Path | None = None) -> Path:
+    """The config file edits go to (never config.example.yaml; created from it if needed)."""
+    if path is not None:
+        target = Path(path)
+    elif os.environ.get(CONFIG_ENV):
+        target = Path(os.environ[CONFIG_ENV])
+    else:
+        target = PROJECT_ROOT / "config.yaml"
+    if not target.exists():
+        shutil.copyfile(PROJECT_ROOT / "config.example.yaml", target)
+    return target
+
+
+def _yaml_scalar(v: object) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, time):
+        return f'"{v:%H:%M}"'
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_yaml_scalar(x) for x in v) + "]"
+    if isinstance(v, str):
+        return f'"{v}"' if (":" in v or v == "" or v.strip() != v) else v
+    return repr(v) if isinstance(v, float) else str(v)
+
+
+def _find_block(lines: list[str], start: int, end: int, key: str, indent: int) -> int | None:
+    """Index of the line `<indent spaces>key:` within lines[start:end], else None."""
+    pat = re.compile(rf"^ {{{indent}}}{re.escape(key)}:(\s|$)")
+    for i in range(start, end):
+        if pat.match(lines[i]):
+            return i
+    return None
+
+
+def _block_end(lines: list[str], i: int, indent: int) -> int:
+    """First line after the block opened at line i (next line with indent <= indent)."""
+    j = i + 1
+    while j < len(lines):
+        ln = lines[j]
+        if ln.strip() and not ln.lstrip().startswith("#"):
+            if len(ln) - len(ln.lstrip(" ")) <= indent:
+                break
+        j += 1
+    return j
+
+
+def update_config_values(updates: dict[str, object], path: str | Path | None = None) -> Path:
+    """Set dotted keys (e.g. "breakout.volume_mult", "alerts.quiet_hours.enabled") in
+    config.yaml by editing only those lines, so comments and layout are kept.
+
+    Values must be scalars, times or flat lists. Missing keys are added at the end
+    of their section. The result is validated before writing; a .bak is kept.
+    """
+    target = writable_config_path(path)
+    lines = target.read_text(encoding="utf-8").splitlines()
+    for dotted, value in updates.items():
+        parts = dotted.split(".")
+        start, end, indent = 0, len(lines), 0
+        for depth, key in enumerate(parts):
+            i = _find_block(lines, start, end, key, indent)
+            last = depth == len(parts) - 1
+            if i is None:
+                # create the missing key (and any missing parent) at the end of the block
+                insert = end
+                while insert > start and not lines[insert - 1].strip():
+                    insert -= 1
+                if last:
+                    lines.insert(insert, f"{' ' * indent}{key}: {_yaml_scalar(value)}")
+                    break
+                lines.insert(insert, f"{' ' * indent}{key}:")
+                i = insert
+            if last:
+                ln = lines[i]
+                comment = ""
+                m = re.search(r"\s+#.*$", ln.split(":", 1)[1])
+                if m:
+                    comment = m.group(0)
+                lines[i] = f"{' ' * indent}{key}: {_yaml_scalar(value)}{comment}"
+            else:
+                start, end, indent = i + 1, _block_end(lines, i, indent), indent + 2
+    new = "\n".join(lines) + "\n"
+    Config.model_validate(yaml.safe_load(new))  # never write a config that won't load
+    shutil.copyfile(target, target.with_suffix(".yaml.bak"))
+    target.write_text(new, encoding="utf-8")
+    get_config.cache_clear()
+    logger.info("config updated ({} keys) in {}", len(updates), target)
     return target

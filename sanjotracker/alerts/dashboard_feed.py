@@ -143,3 +143,10 @@ class AlertFeed:
             q = q.where(alerts.c.created_at >= _epoch(since))
         with self.engine.connect() as conn:
             return [Event.model_validate_json(p) for (p,) in conn.execute(q).all()]
+
+    def get(self, alert_id: int) -> Event | None:
+        """One stored alert as an Event."""
+        q = select(alerts.c.payload).where(alerts.c.id == int(alert_id))
+        with self.engine.connect() as conn:
+            p = conn.execute(q).scalar()
+        return None if p is None else Event.model_validate_json(p)
