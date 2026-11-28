@@ -30,7 +30,7 @@ from sanjotracker.analysis.levels import compute_levels, nearest_levels
 from sanjotracker.charts import event_figure, levels_chart
 from sanjotracker.config import Config, Secrets
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import market_of, session_tz_for
+from sanjotracker.data.updater import normalize_symbol, session_tz_for
 
 TELEGRAM_API = "https://api.telegram.org"
 CAPTION_LIMIT = 1024
@@ -102,7 +102,7 @@ def event_chart_png(store: CandleStore, event: Event, cfg: Config) -> bytes:
         levels,
         event,
         display_tz=cfg.app.timezone_display,
-        is_nse=market_of(event.symbol) == "nse",
+        is_nse=True,
     )
     return render_png(fig)
 
@@ -222,7 +222,7 @@ def send_event(
 HELP = (
     "<b>SanjoTracker</b> — S/R breakout alerts (analysis only, no orders).\n\n"
     "/watchlist — symbols being scanned\n"
-    "/add SYMBOL — e.g. /add TCS.NS or /add DOGE/USDT\n"
+    "/add SYMBOL — e.g. /add TCS (.NS is added for you)\n"
     "/remove SYMBOL\n"
     "/levels SYMBOL — nearest support/resistance (daily) + chart\n"
     "/status — scheduler and data status"
@@ -236,7 +236,7 @@ class BotActions:
         self,
         load_cfg: Callable[[], Config],
         store: CandleStore,
-        save_watchlist: Callable[[list[str], list[str]], None],
+        save_watchlist: Callable[[list[str]], None],
         validate_symbol: Callable[[str], str | None],
         status_text: Callable[[], str],
     ) -> None:
@@ -249,37 +249,33 @@ class BotActions:
     def watchlist(self) -> str:
         cfg = self.load_cfg()
         nse = ", ".join(cfg.watchlist.nse) or "-"
-        crypto = ", ".join(cfg.watchlist.crypto) or "-"
-        return f"<b>NSE</b>: {html.escape(nse)}\n<b>Crypto</b>: {html.escape(crypto)}"
+        return f"<b>Watchlist (NSE)</b>: {html.escape(nse)}"
 
     def add(self, symbol: str) -> str:
-        symbol = symbol.strip().upper()
+        if "/" in symbol:
+            return "Crypto pairs aren't supported: SanjoTracker is NSE-only."
+        symbol = normalize_symbol(symbol)
         cfg = self.load_cfg()
-        market = market_of(symbol)
-        current = getattr(cfg.watchlist, market)
+        current = list(cfg.watchlist.nse)
         if symbol in current:
             return f"{html.escape(symbol)} is already on the watchlist."
         err = self.validate_symbol(symbol)
         if err:
             return f"Could not add {html.escape(symbol)}: {html.escape(err)}"
-        nse, crypto = list(cfg.watchlist.nse), list(cfg.watchlist.crypto)
-        (nse if market == "nse" else crypto).append(symbol)
-        self.save_watchlist(nse, crypto)
-        return f"Added {html.escape(symbol)} ({market}). It will be in the next scan."
+        self.save_watchlist([*current, symbol])
+        return f"Added {html.escape(symbol)}. It will be in the next scan."
 
     def remove(self, symbol: str) -> str:
-        symbol = symbol.strip().upper()
-        cfg = self.load_cfg()
-        nse, crypto = list(cfg.watchlist.nse), list(cfg.watchlist.crypto)
-        for lst in (nse, crypto):
-            if symbol in lst:
-                lst.remove(symbol)
-                self.save_watchlist(nse, crypto)
-                return f"Removed {html.escape(symbol)}."
-        return f"{html.escape(symbol)} is not on the watchlist."
+        symbol = normalize_symbol(symbol)
+        current = list(self.load_cfg().watchlist.nse)
+        if symbol not in current:
+            return f"{html.escape(symbol)} is not on the watchlist."
+        current.remove(symbol)
+        self.save_watchlist(current)
+        return f"Removed {html.escape(symbol)}."
 
     def levels(self, symbol: str, timeframe: str = "1d") -> tuple[str, bytes | None]:
-        symbol = symbol.strip().upper()
+        symbol = normalize_symbol(symbol)
         cfg = self.load_cfg()
         df = self.store.load(symbol, timeframe, limit=cfg.breakout.scan_history_bars)
         if df.empty:
@@ -301,7 +297,7 @@ class BotActions:
                 lv,
                 title=f"{symbol} · {timeframe}",
                 display_tz=cfg.app.timezone_display,
-                is_nse=market_of(symbol) == "nse",
+                is_nse=True,
                 intraday=False,
                 height=500,
             )
@@ -338,7 +334,7 @@ def build_bot_app(token: SecretStr, chat_id: str, actions: BotActions):  # noqa:
     async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         sym = _arg(ctx)
         if not sym:
-            return await reply(update, "Usage: /add SYMBOL  (e.g. /add TCS.NS)")
+            return await reply(update, "Usage: /add SYMBOL  (e.g. /add TCS)")
         await reply(update, f"Checking {html.escape(sym.upper())}…")
         await reply(update, await asyncio.to_thread(actions.add, sym))
 

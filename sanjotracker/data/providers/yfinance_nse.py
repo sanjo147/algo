@@ -2,7 +2,9 @@
 
 Free-data limits (Yahoo): 5m/15m only for the last ~60 days, 1h for the last ~730
 days. Requests older than that are clamped with a warning instead of failing.
-Prices are split/dividend adjusted (auto_adjust=True).
+Prices are split/bonus adjusted but NOT dividend adjusted (auto_adjust=False; Yahoo's
+raw OHLC is already split-adjusted). That is the same convention as the NSE MCP
+provider, so the two sources can stand in for each other without price jumps.
 """
 
 from __future__ import annotations
@@ -103,7 +105,7 @@ class YFinanceNSEProvider(DataProvider):
                 interval=_YF_INTERVAL[timeframe],
                 start=start,
                 end=end,
-                auto_adjust=True,
+                auto_adjust=False,
                 actions=False,
                 prepost=False,
             )

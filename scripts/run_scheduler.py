@@ -3,7 +3,7 @@
 Examples:
     python scripts/run_scheduler.py                       # run forever (Ctrl+C to stop)
     python scripts/run_scheduler.py --keep-awake          # also stop Windows from sleeping
-    python scripts/run_scheduler.py --once crypto_intraday  # one job now, then exit
+    python scripts/run_scheduler.py --once nse_swing     # one job now, then exit
     python scripts/run_scheduler.py --once nse_swing --no-telegram
     python scripts/run_scheduler.py --test-telegram       # send a test message
 """
@@ -56,9 +56,7 @@ def validator(service: AlertService):  # noqa: ANN201
 
     def check(symbol: str) -> str | None:
         cfg = service.load_cfg()
-        updater = build_updater(
-            service.store, {"nse": cfg.providers.nse, "crypto": cfg.providers.crypto}
-        )
+        updater = build_updater(service.store, cfg.providers)
         res = updater.update(symbol, "1d")
         if res.error:
             return res.error

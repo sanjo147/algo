@@ -32,8 +32,7 @@ SIGNAL_COLUMNS = ["entry", "exit", "stop", "target_r"]
 class StrategyContext:
     symbol: str = ""
     timeframe: str = "1d"
-    session_tz: str = "UTC"
-    market: str = "crypto"  # "nse" | "crypto"
+    session_tz: str = "Asia/Kolkata"
     levels: LevelsConfig = field(default_factory=LevelsConfig)
     breakout: BreakoutConfig = field(default_factory=BreakoutConfig)
 
@@ -57,7 +56,6 @@ class Strategy(ABC):
     name: ClassVar[str] = "base"
     description: ClassVar[str] = ""
     timeframes: ClassVar[set[str]] = {"5m", "15m", "1h", "1d", "1w"}
-    markets: ClassVar[set[str]] = {"nse", "crypto"}
     Params: ClassVar[type[BaseModel]]
     param_grid: ClassVar[dict[str, list[Any]]] = {}  # for walk-forward
 
@@ -68,8 +66,8 @@ class Strategy(ABC):
         """Bars after which the engine closes the trade (param `max_hold_bars`, if any)."""
         return getattr(self.params, "max_hold_bars", None)
 
-    def supports(self, market: str, timeframe: str) -> bool:
-        return market in self.markets and timeframe in self.timeframes
+    def supports(self, timeframe: str) -> bool:
+        return timeframe in self.timeframes
 
     @abstractmethod
     def generate_signals(self, df: pd.DataFrame, ctx: StrategyContext) -> pd.DataFrame:

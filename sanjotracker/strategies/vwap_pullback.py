@@ -5,7 +5,7 @@ that dips to/through VWAP but closes back above it, bullish, is a long entry.
 Short mirror in a downtrend. Stop = below the dip (min(low, VWAP)) - stop_atr x ATR;
 target = target_r x risk. The first `skip_bars` of each session are ignored
 (VWAP is unstable right after the reset). NSE: no entries after `last_entry` IST.
-VWAP resets 00:00 IST for NSE and 00:00 UTC for crypto.
+VWAP resets at the start of each IST trading day.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ class VwapParams(BaseModel):
     stop_atr: float = 0.5
     target_r: float = 1.5
     skip_bars: int = 2
-    last_entry: str = "14:45"  # NSE only
+    last_entry: str = "14:45"  # IST, by bar close
     max_hold_bars: int | None = 24
 
 
@@ -54,10 +54,10 @@ class VwapPullback(Strategy):
         a = atr(df)
         local = local_times(df, ctx.session_tz)
         warm = bars_into_session(local) >= p.skip_bars
-        if ctx.market == "nse":
-            tf_min = int(TIMEFRAME_DELTAS[ctx.timeframe].total_seconds() // 60)
-            hh, mm = (int(x) for x in p.last_entry.split(":"))
-            warm &= minutes_of_day(local) + tf_min <= hh * 60 + mm
+        # no new entries late in the NSE session
+        tf_min = int(TIMEFRAME_DELTAS[ctx.timeframe].total_seconds() // 60)
+        hh, mm = (int(x) for x in p.last_entry.split(":"))
+        warm &= minutes_of_day(local) + tf_min <= hh * 60 + mm
         prev_above = c.shift(1) > vw.shift(1)
         prev_below = c.shift(1) < vw.shift(1)
         same_day = local.dt.date == local.dt.date.shift(1)  # yesterday's VWAP doesn't count

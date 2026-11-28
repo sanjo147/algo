@@ -1,14 +1,12 @@
-"""APScheduler jobs (NSE market hours vs crypto 24/7). All times are IST.
+"""APScheduler jobs for NSE market hours. All times are IST.
 
 | job              | when                                         | what                    |
 |------------------|----------------------------------------------|-------------------------|
 | nse_intraday     | Mon–Fri 09:32–15:32, every 15 min (:02 :17…) | 15m scan, NSE           |
 | nse_swing        | Mon–Fri at daily_summary_time + 1 min (15:46)| 1d scan + daily summary |
-| crypto_intraday  | every 15 min, 24/7 (:00:30, :15:30, …)       | 15m scan, crypto        |
-| crypto_swing     | daily 05:35 (after the 00:00 UTC close)      | 1d scan, crypto         |
 
-Each run is 2 min (NSE) / 30 s (crypto) after the bar closes, so the bar is final.
-NSE jobs skip weekends and the holidays in config (`nse_market.holidays`).
+Each run is 2 min after the bar closes, so the bar is final. Jobs skip weekends and
+the holidays in config (`nse_market.holidays`).
 Jobs run one at a time (single worker) so SQLite and the free APIs aren't hammered.
 If the laptop sleeps, a missed run is done once on wake if still within the grace
 time, otherwise skipped (no burst of catch-up scans).
@@ -39,14 +37,12 @@ from sanjotracker.analysis.breakout import Event
 from sanjotracker.analysis.regime import Regime
 from sanjotracker.config import Config, load_config
 from sanjotracker.data.store import CandleStore
-from sanjotracker.scanner import Market, Scanner, Style
+from sanjotracker.scanner import Scanner, Style
 
 IST = ZoneInfo("Asia/Kolkata")
-JOBS: dict[str, tuple[Style, Market]] = {
+JOBS: dict[str, tuple[Style, str]] = {
     "nse_intraday": ("intraday", "nse"),
     "nse_swing": ("swing", "nse"),
-    "crypto_intraday": ("intraday", "crypto"),
-    "crypto_swing": ("swing", "crypto"),
 }
 # first/last time an NSE 15m bar can have closed (+2 min) on a trading day
 NSE_INTRADAY_WINDOW = (time(9, 30), time(15, 35))
@@ -128,8 +124,8 @@ class AlertService:
         t0 = datetime.now(UTC)
         scanner = self.scanner_factory(cfg, self.store)
         try:
-            events = scanner.scan(style, market=market)
-            self.benchmarks.update(scanner.benchmark_regimes(market))
+            events = scanner.scan(style)
+            self.benchmarks.update(scanner.benchmark_regimes())
         except Exception as exc:  # a scan crash must not kill the scheduler
             logger.exception("{} scan crashed", job)
             info.errors["scan"] = str(exc)
@@ -181,12 +177,10 @@ class AlertService:
             from sanjotracker.data.updater import build_updater
             from sanjotracker.paper.trader import PaperTrader
 
-            updater = build_updater(
-                self.store, {"nse": cfg.providers.nse, "crypto": cfg.providers.crypto}
-            )
-            watch = {*cfg.watchlist.nse, *cfg.watchlist.crypto}
+            updater = build_updater(self.store, cfg.providers)
+            watch = set(cfg.watchlist.nse)
             res = PaperTrader(cfg, self.store, self.notifier, updater, skip_update=watch).run(
-                timeframes={st.primary, st.trend}, markets={market}, now=now
+                timeframes={st.primary, st.trend}, now=now
             )
             info.paper_opened, info.paper_closed = len(res.opened), len(res.closed)
             info.errors.update({f"paper {k}": v for k, v in res.errors.items()})
@@ -291,8 +285,6 @@ def build_scheduler(service: AlertService, cfg: Config) -> BackgroundScheduler:
         "nse_swing": CronTrigger(
             day_of_week="mon-fri", hour=swing_at.hour, minute=swing_at.minute, timezone=IST
         ),
-        "crypto_intraday": CronTrigger(minute="0,15,30,45", second=30, timezone=IST),
-        "crypto_swing": CronTrigger(hour=5, minute=35, timezone=IST),
     }
     for job, trig in triggers.items():
         grace = 3600 if job.endswith("swing") else 600

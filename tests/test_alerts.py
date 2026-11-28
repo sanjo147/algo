@@ -216,9 +216,9 @@ def test_send_event_falls_back_to_text_when_chart_fails() -> None:
 def _actions(store, saved: list, valid: bool = True) -> BotActions:  # noqa: ANN001
     cfg = load_config(PROJECT_ROOT / "config.example.yaml")
 
-    def save(nse: list[str], crypto: list[str]) -> None:
-        saved.append((nse, crypto))
-        cfg.watchlist.nse, cfg.watchlist.crypto = nse, crypto
+    def save(nse: list[str]) -> None:
+        saved.append(nse)
+        cfg.watchlist.nse = nse
 
     return BotActions(
         load_cfg=lambda: cfg,
@@ -233,9 +233,11 @@ def test_bot_add_remove_watchlist(store) -> None:  # noqa: ANN001
     saved: list = []
     a = _actions(store, saved)
     assert "Added WIPRO.NS" in a.add("wipro.ns")
-    assert "DOGE/USDT" in a.add("DOGE/USDT") and "DOGE/USDT" in saved[-1][1]
+    assert "Added TATAPOWER.NS" in a.add("tatapower")  # .NS added for you
+    assert "TATAPOWER.NS" in saved[-1]
+    assert "NSE-only" in a.add("DOGE/USDT")
     assert "already" in a.add("RELIANCE.NS")
-    assert "Removed" in a.remove("WIPRO.NS") and "WIPRO.NS" not in saved[-1][0]
+    assert "Removed" in a.remove("WIPRO.NS") and "WIPRO.NS" not in saved[-1]
     assert "not on the watchlist" in a.remove("NOPE.NS")
     assert "RELIANCE.NS" in a.watchlist()
 

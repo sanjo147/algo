@@ -2,7 +2,7 @@
 
 Examples:
     python scripts/plot_levels.py RELIANCE.NS 1d
-    python scripts/plot_levels.py BTC/USDT 15m --bars 400 --open
+    python scripts/plot_levels.py TCS 15m --bars 400 --open
     python scripts/plot_levels.py ^NSEI 1h --no-update
 """
 
@@ -17,7 +17,7 @@ from sanjotracker.analysis.levels import compute_levels, find_pivots, nearest_le
 from sanjotracker.charts import levels_chart
 from sanjotracker.config import PROJECT_ROOT, get_config
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import build_updater, market_of, session_tz_for
+from sanjotracker.data.updater import build_updater, normalize_symbol, session_tz_for
 from sanjotracker.log import setup_logging
 
 
@@ -38,12 +38,10 @@ def main() -> int:
     setup_logging()
     cfg = get_config()
     store = CandleStore(cfg.db_file)
-    market = market_of(args.symbol)
+    args.symbol = normalize_symbol(args.symbol)
 
     if not args.no_update:
-        build_updater(store, {market: getattr(cfg.providers, market)}).update(
-            args.symbol, args.timeframe
-        )
+        build_updater(store, cfg.providers).update(args.symbol, args.timeframe)
 
     df = store.load(args.symbol, args.timeframe)
     if df.empty:
@@ -63,7 +61,7 @@ def main() -> int:
         pivots=pivots,
         title=f"{args.symbol} · {args.timeframe} · S/R zones (as of last closed bar)",
         display_tz=cfg.app.timezone_display,
-        is_nse=market == "nse",
+        is_nse=True,
         intraday=args.timeframe in ("5m", "15m", "1h"),
     )
     safe = re.sub(r"[^A-Za-z0-9]+", "-", args.symbol).strip("-")

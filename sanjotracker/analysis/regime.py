@@ -58,7 +58,7 @@ def atr_pct_rank(
 ) -> pd.Series:
     """Percentile (0–1) of each bar's ATR% within the trailing ~1 year (time-based window).
 
-    A time window (not a bar count) works for both NSE (6.25h sessions) and 24/7 crypto.
+    A time window (not a bar count) works whatever the timeframe.
     """
     ap = (atr(df, atr_n) / df["close"]).to_numpy()
     s = pd.Series(ap, index=pd.DatetimeIndex(pd.to_datetime(df["timestamp"], utc=True)))

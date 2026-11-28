@@ -7,18 +7,13 @@ import streamlit as st
 
 from sanjotracker import dashboard as d
 from sanjotracker.charts import event_figure
-from sanjotracker.data.updater import market_of
 
 c = d.cfg()
 db = d.db_key()
 
 # ------------------------------------------------------------------ regime header
 with st.container(border=True):
-    cols = st.columns(2)
-    for col, sym in zip(cols, (c.benchmarks.nse, c.benchmarks.crypto), strict=True):
-        with col:
-            r = d.regime_of(db, sym, "1d")
-            d.regime_badges("NIFTY 50" if sym == c.benchmarks.nse else sym, r)
+    d.regime_badges("NIFTY 50", d.regime_of(db, c.benchmarks.nse, "1d"))
 
 
 # ------------------------------------------------------------------ live feed (fragment)
@@ -127,7 +122,7 @@ def alert_feed() -> None:
                     st.warning("No candles stored for this symbol/timeframe.")
                 else:
                     lv, _ = d.levels_and_pivots(db, ev.symbol, ev.timeframe)
-                    fig = event_figure(candles, lv, ev, is_nse=market_of(ev.symbol) == "nse")
+                    fig = event_figure(candles, lv, ev, is_nse=True)
                     st.plotly_chart(fig, alt=f"{ev.symbol} chart around the {ev.event.value}")
 
 

@@ -95,7 +95,7 @@ def test_walk_forward_windows_never_overlap_test_data() -> None:
 def test_walk_forward_runs_and_reports_oos() -> None:
     df = make_candles(T0, 1200, "1h", seed=8)
     df[["open", "high", "low", "close"]] += 20 * np.sin(np.arange(1200) / 60)[:, None]
-    ctx = StrategyContext("X/USDT", "1h", "UTC", "crypto")
+    ctx = StrategyContext("X.NS", "1d")
     wf = walk_forward(df, STRATEGIES["ema_crossover"], ctx, ZeroCostModel(), n_windows=3)
     assert len(wf.windows) == 3
     assert all(set(p) <= set(STRATEGIES["ema_crossover"].param_grid) for p in wf.windows["params"])
@@ -105,10 +105,10 @@ def test_walk_forward_runs_and_reports_oos() -> None:
 
 def test_leaderboard_saves_db_and_csv(store, tmp_path) -> None:  # noqa: ANN001
     cfg = load_config(PROJECT_ROOT / "config.example.yaml")
-    cfg.watchlist.nse, cfg.watchlist.crypto = [], ["AAA/USDT"]
+    cfg.watchlist.nse = ["AAA.NS"]
     df = make_candles(T0, 800, "1d", seed=4)
     df[["open", "high", "low", "close"]] += 30 * np.sin(np.arange(800) / 50)[:, None]
-    store.upsert("AAA/USDT", "1d", df, "test")
+    store.upsert("AAA.NS", "1d", df, "test")
     lb = run_leaderboard(
         cfg, store, strategies=["ema_crossover", "rsi_mean_reversion"], csv_dir=tmp_path
     )
@@ -131,4 +131,4 @@ def test_leaderboard_saves_db_and_csv(store, tmp_path) -> None:  # noqa: ANN001
 def test_run_one_needs_data(store) -> None:  # noqa: ANN001
     cfg = load_config(PROJECT_ROOT / "config.example.yaml")
     with pytest.raises(ValueError, match="no 1d candles"):
-        run_one(cfg, store, get_strategy("ema_crossover"), "NONE/USDT", "1d")
+        run_one(cfg, store, get_strategy("ema_crossover"), "NONE.NS", "1d")

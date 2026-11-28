@@ -3,7 +3,7 @@
 Examples:
     python scripts/run_backtest.py --list
     python scripts/run_backtest.py sr_breakout RELIANCE.NS 1d
-    python scripts/run_backtest.py ema_crossover BTC/USDT 1h --param fast=10 --param slow=50
+    python scripts/run_backtest.py ema_crossover TCS 1h --param fast=10 --param slow=50
     python scripts/run_backtest.py sr_breakout RELIANCE.NS 1d --walkforward --plot
     python scripts/run_backtest.py --leaderboard
     python scripts/run_backtest.py --leaderboard --strategies ema_crossover --timeframes 1d
@@ -28,7 +28,7 @@ from sanjotracker.backtest.walkforward import walk_forward
 from sanjotracker.charts import equity_chart
 from sanjotracker.config import PROJECT_ROOT, get_config
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import market_of
+from sanjotracker.data.updater import normalize_symbol
 from sanjotracker.log import setup_logging
 from sanjotracker.strategies import STRATEGIES, get_strategy
 
@@ -100,7 +100,7 @@ def _onoff(flag: bool) -> str:
 def _list() -> None:
     for name, cls in STRATEGIES.items():
         print(f"\n{name}: {cls.description}")
-        print(f"  timeframes {sorted(cls.timeframes)} · markets {sorted(cls.markets)}")
+        print(f"  timeframes {sorted(cls.timeframes)}")
         for k, f in cls.Params.model_fields.items():
             grid = cls.param_grid.get(k)
             print(f"  {k} = {f.default!r}" + (f"   (walk-forward tries {grid})" if grid else ""))
@@ -110,9 +110,9 @@ def _single(args: argparse.Namespace) -> int:
     cfg = get_config()
     store = CandleStore(cfg.db_file)
     strat = get_strategy(args.strategy, **_parse_params(args.param))
-    market = market_of(args.symbol)
-    if not strat.supports(market, args.timeframe):
-        print(f"{strat.name} supports {sorted(strat.markets)} on {sorted(strat.timeframes)} only.")
+    args.symbol = normalize_symbol(args.symbol)
+    if not strat.supports(args.timeframe):
+        print(f"{strat.name} supports {sorted(strat.timeframes)} only.")
         return 1
     res = run_one(cfg, store, strat, args.symbol, args.timeframe)
     m = compute_metrics(res, cfg.backtest.risk_free_pct / 100)
@@ -158,7 +158,7 @@ def _single(args: argparse.Namespace) -> int:
             f"\nWalk-forward: {bt.walkforward_windows} windows, "
             f"objective {bt.walkforward_objective}…"
         )
-        bench = store.load(getattr(cfg.benchmarks, market), "1d")
+        bench = store.load(cfg.benchmarks.nse, "1d")
         wf = walk_forward(
             store.load(args.symbol, args.timeframe),
             type(strat),

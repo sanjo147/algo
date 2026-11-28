@@ -9,9 +9,9 @@ from tests.conftest import T0, make_candles
 
 def test_upsert_twice_does_not_duplicate(store) -> None:
     df = make_candles(T0, 50)
-    store.upsert("BTC/USDT", "1h", df, "fake")
-    store.upsert("BTC/USDT", "1h", df, "fake")
-    assert store.count("BTC/USDT", "1h") == 50
+    store.upsert("RELIANCE.NS", "1h", df, "fake")
+    store.upsert("RELIANCE.NS", "1h", df, "fake")
+    assert store.count("RELIANCE.NS", "1h") == 50
 
 
 def test_upsert_overwrites_changed_candle(store) -> None:

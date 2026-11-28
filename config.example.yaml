@@ -19,22 +19,19 @@ watchlist:
     - LT.NS
     - BHARTIARTL.NS
     - TMPV.NS        # Tata Motors Passenger Vehicles (old TATAMOTORS.NS, post-demerger). Verified in Phase 1.
-  crypto:
-    - BTC/USDT
-    - ETH/USDT
-    - SOL/USDT
-    - BNB/USDT
-    - XRP/USDT
 
 benchmarks:
-  nse: ^NSEI
-  crypto: BTC/USDT
+  nse: ^NSEI        # NIFTY 50: market regime (bull/bear vs its 200-day EMA)
 
 # ---------------------------------------------------------------- providers
-# Swap a market to a paid broker later by changing only this block.
+# Ordered fallback chains: the first provider that answers is used.
+#  nse_mcp      NSE's official MCP servers (free, no login): daily Bhavcopy, ~5 years,
+#               adjusted here for splits/bonuses. Equities only, no intraday candles.
+#  yfinance_nse Yahoo Finance (free, ~15 min delayed): indices + intraday.
+# Swap in a broker later (e.g. kite) by changing only this block.
 providers:
-  nse: yfinance_nse
-  crypto: binance_ccxt
+  daily: [nse_mcp, yfinance_nse]
+  intraday: [yfinance_nse]
 
 timeframes: [5m, 15m, 1h, 1d, 1w]
 
@@ -111,10 +108,6 @@ costs:
     stamp_buy_pct: 0.00015
     gst_pct: 0.18
     slippage_pct: 0.0005
-  binance_spot:
-    maker_pct: 0.001
-    taker_pct: 0.001
-    slippage_pct: 0.0005
 
 # ---------------------------------------------------------------- alerts
 alerts:
@@ -155,7 +148,7 @@ paper:
   setups:
     - strategy: ema_crossover
       timeframe: 1d
-      symbols: [watchlist]   # or watchlist:nse, watchlist:crypto, or tickers
+      symbols: [watchlist]   # or a list of tickers, e.g. [RELIANCE.NS, TCS.NS]
     - strategy: sr_breakout
       timeframe: 1d
       symbols: [watchlist]

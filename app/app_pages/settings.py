@@ -12,6 +12,7 @@ from sanjotracker.config import (
     save_watchlist,
     update_config_values,
 )
+from sanjotracker.data.updater import normalize_symbol
 
 c = d.cfg()
 
@@ -21,7 +22,6 @@ st.caption(
 )
 
 NSE_RE = re.compile(r"^[A-Z0-9&\-_.]+\.NS$")
-CRYPTO_RE = re.compile(r"^[A-Z0-9]+/[A-Z0-9]+$")
 
 # ------------------------------------------------------------------ watchlist
 with st.form("wl_form", border=True):
@@ -32,31 +32,20 @@ with st.form("wl_form", border=True):
         default=c.watchlist.nse,
         accept_new_options=True,
         key="set_nse",
-        help="Yahoo tickers with .NS, e.g. TCS.NS. Type to add a new one.",
-    )
-    crypto = st.multiselect(
-        "Crypto pairs",
-        c.watchlist.crypto,
-        default=c.watchlist.crypto,
-        accept_new_options=True,
-        key="set_crypto",
-        help="Binance pairs, e.g. DOGE/USDT. Type to add a new one.",
+        help="Type a symbol to add it, e.g. TCS (.NS is added for you).",
     )
     if st.form_submit_button("Save watchlist", type="primary", icon=":material/save:"):
-        nse_u = [s.strip().upper() for s in nse]
-        crypto_u = [s.strip().upper() for s in crypto]
-        bad = [s for s in nse_u if not NSE_RE.match(s)] + [
-            s for s in crypto_u if not CRYPTO_RE.match(s)
-        ]
+        syms = [normalize_symbol(x) for x in nse]
+        bad = [x for x in syms if not NSE_RE.match(x)]
         if bad:
             st.error(
-                f"Not valid: {', '.join(bad)}. NSE needs `.NS`, crypto needs `BASE/QUOTE`.",
+                f"Not valid: {', '.join(bad)}. Use NSE symbols like TCS or TCS.NS.",
                 icon=":material/error:",
             )
         else:
-            save_watchlist(list(dict.fromkeys(nse_u)), list(dict.fromkeys(crypto_u)))
+            save_watchlist(list(dict.fromkeys(syms)))
             st.cache_data.clear()
-            new = set(nse_u + crypto_u) - set(c.watchlist.nse + c.watchlist.crypto)
+            new = set(syms) - set(c.watchlist.nse)
             st.success(
                 "Saved."
                 + (

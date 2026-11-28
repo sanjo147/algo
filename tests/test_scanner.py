@@ -9,13 +9,12 @@ from sanjotracker.scanner import Scanner
 from tests.conftest import T0, make_candles
 from tests.test_breakout import BREAKOUT_BAR, _append, _range
 
-SYM = "AAA/USDT"
+SYM = "AAA.NS"
 
 
 def _cfg():  # noqa: ANN202
     cfg = load_config(PROJECT_ROOT / "config.example.yaml")
-    cfg.watchlist.nse = []
-    cfg.watchlist.crypto = [SYM, "MISSING/USDT"]
+    cfg.watchlist.nse = [SYM, "MISSING.NS"]
     return cfg
 
 
@@ -40,7 +39,7 @@ def test_scan_finds_breakout_with_trend(store) -> None:  # noqa: ANN001
     assert len(bo) == 1
     assert bo[0].symbol == SYM and bo[0].timeframe == "15m" and bo[0].style == "intraday"
     assert bo[0].trend_tf == "1h" and bo[0].mtf_ok is True
-    assert "MISSING/USDT" in sc.errors  # one bad symbol doesn't stop the scan
+    assert "MISSING.NS" in sc.errors  # one bad symbol doesn't stop the scan
     assert SYM in sc.regimes
 
 

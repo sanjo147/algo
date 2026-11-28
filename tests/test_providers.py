@@ -1,4 +1,4 @@
-"""Provider tests with mocked yfinance / ccxt objects (no network)."""
+"""Provider tests with mocked yfinance objects (no network). NSE MCP: test_nse_mcp.py."""
 
 import ast
 from datetime import UTC, datetime, timedelta
@@ -16,7 +16,6 @@ from sanjotracker.data.providers.base import (
     normalize_ohlcv,
     with_retries,
 )
-from sanjotracker.data.providers.binance_ccxt import BinanceCCXTProvider
 from sanjotracker.data.providers.kite_stub import KiteProvider
 from sanjotracker.data.providers.yfinance_nse import YFinanceNSEProvider
 
@@ -47,22 +46,6 @@ class FakeTicker:
             },
             index=idx,
         )
-
-
-class FakeExchange:
-    """Mimics ccxt fetch_ohlcv paging with a page size of 3."""
-
-    def __init__(self, n: int, step_ms: int) -> None:
-        start = int(datetime(2026, 1, 1, tzinfo=UTC).timestamp() * 1000)
-        self.rows = [[start + i * step_ms, 1.0, 2.0, 0.5, 1.5, 10.0] for i in range(n)]
-        self.calls = 0
-
-    def fetch_ohlcv(self, symbol, timeframe, since=None, limit=None):  # noqa: ANN001
-        self.calls += 1
-        return [r for r in self.rows if r[0] >= since][:3]
-
-    def fetch_ticker(self, symbol):  # noqa: ANN001
-        return {"last": 65000.0}
 
 
 # ------------------------------------------------------------------ base
@@ -163,33 +146,10 @@ def test_nse_daily_bar_dropped_until_after_close() -> None:
     assert len(p.drop_incomplete(df, "1d", after)) == 1
 
 
-# ------------------------------------------------------------------ ccxt
-
-
-def test_binance_paginates_until_end() -> None:
-    step = 3_600_000
-    ex = FakeExchange(n=10, step_ms=step)
-    p = BinanceCCXTProvider(exchange=ex)
-    start = datetime(2026, 1, 1, tzinfo=UTC)
-    df = p.get_ohlcv("BTC/USDT", "1h", start=start, end=start + timedelta(hours=10))
-    assert len(df) == 10
-    assert df["timestamp"].is_unique
-    assert ex.calls >= 4  # 3 + 3 + 3 + 1
-    assert p.get_latest("BTC/USDT") == 65000.0
-
-
-def test_binance_respects_end() -> None:
-    ex = FakeExchange(n=10, step_ms=3_600_000)
-    p = BinanceCCXTProvider(exchange=ex)
-    start = datetime(2026, 1, 1, tzinfo=UTC)
-    df = p.get_ohlcv("BTC/USDT", "1h", start=start, end=start + timedelta(hours=4))
-    assert len(df) == 4
-
-
 def test_unsupported_timeframe() -> None:
-    p = BinanceCCXTProvider(exchange=FakeExchange(1, 1))
+    p = YFinanceNSEProvider(ticker_factory=FakeTicker)
     with pytest.raises(UnsupportedTimeframeError):
-        p.get_ohlcv("BTC/USDT", "3m")
+        p.get_ohlcv("RELIANCE.NS", "3m")
 
 
 # ------------------------------------------------------------------ stub + registry
@@ -201,7 +161,7 @@ def test_kite_stub_raises() -> None:
 
 
 def test_registry() -> None:
-    assert {"yfinance_nse", "binance_ccxt", "kite"} <= set(available_providers())
+    assert {"nse_mcp", "yfinance_nse", "kite"} <= set(available_providers())
     assert isinstance(get_provider("kite"), KiteProvider)
     with pytest.raises(ValueError):
         get_provider("nope")
@@ -211,8 +171,8 @@ def test_registry() -> None:
 
 
 def test_only_providers_import_vendor_libraries() -> None:
-    """Rule 4: yfinance / ccxt may only be imported inside data/providers/."""
-    banned = {"yfinance", "ccxt"}
+    """Rule 4: vendor data libraries may only be imported inside data/providers/."""
+    banned = {"yfinance", "ccxt", "kiteconnect", "mcp"}
     allowed_dir = PROJECT_ROOT / "sanjotracker" / "data" / "providers"
     offenders = []
     for folder in ("sanjotracker", "app", "scripts"):

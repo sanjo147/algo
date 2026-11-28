@@ -2,7 +2,7 @@
 
 Notes:
 - Sharpe/Sortino use per-bar returns annualised by the measured bars-per-year
-  (works for NSE sessions and 24/7 crypto alike). Risk-free rate default 0;
+  (works for any NSE timeframe). Risk-free rate default 0;
   pass rf_annual=0.065 to compare against Indian T-bills.
 - Expectancy is in R (net P&L / initial risk): +0.2R means you make 0.2x what
   you risk per trade on average, after costs.

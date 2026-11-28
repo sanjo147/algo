@@ -26,8 +26,8 @@ def nse_15m(days: int = 12, seed: int = 0) -> pd.DataFrame:
     return df
 
 
-CRYPTO_1H = StrategyContext("X/USDT", "1h", "UTC", "crypto")
-NSE_15M = StrategyContext("X.NS", "15m", "Asia/Kolkata", "nse")
+DAILY = StrategyContext("X.NS", "1d")
+NSE_15M = StrategyContext("X.NS", "15m")
 
 
 def _data_for(name: str) -> tuple[pd.DataFrame, StrategyContext]:
@@ -37,7 +37,7 @@ def _data_for(name: str) -> tuple[pd.DataFrame, StrategyContext]:
     df[["open", "high", "low", "close"]] += 15 * np.sin(np.arange(600) / 40)[:, None]
     if name == "sr_breakout":
         df = _eventful_series()  # ranges, breakouts, breakdowns, a retest
-    return df, CRYPTO_1H
+    return df, DAILY
 
 
 @pytest.mark.parametrize("name", sorted(STRATEGIES))
@@ -93,7 +93,7 @@ def test_ema_crossover_enters_on_the_cross_bar() -> None:
             "volume": 1.0,
         }
     )
-    sig = get_strategy("ema_crossover", fast=5, slow=20).generate_signals(df, CRYPTO_1H)
+    sig = get_strategy("ema_crossover", fast=5, slow=20).generate_signals(df, DAILY)
     longs = np.flatnonzero(sig["entry"] == 1)
     assert len(longs) == 1 and longs[0] > 80
     from sanjotracker.analysis.indicators import ema
@@ -106,13 +106,13 @@ def test_ema_crossover_enters_on_the_cross_bar() -> None:
 def test_rsi_needs_uptrend_for_longs() -> None:
     df = make_candles(T0, 500, "1h", seed=11)
     df[["open", "high", "low", "close"]] -= np.linspace(0, 60, 500)[:, None]  # downtrend
-    sig = get_strategy("rsi_mean_reversion").generate_signals(df, CRYPTO_1H)
+    sig = get_strategy("rsi_mean_reversion").generate_signals(df, DAILY)
     assert not (sig["entry"] == 1).any()
 
 
 def test_sr_breakout_enters_on_breakout_bar() -> None:
     df = _append(_range(), [BREAKOUT_BAR])
-    sig = get_strategy("sr_breakout").generate_signals(df, CRYPTO_1H)
+    sig = get_strategy("sr_breakout").generate_signals(df, DAILY)
     assert sig["entry"].iloc[-1] == 1
     assert sig["stop"].iloc[-1] < 110.5 and sig["target_r"].iloc[-1] == 2.0
 
@@ -153,8 +153,8 @@ def test_no_lookahead_sr_breakout_sensitive() -> None:
     strat = get_strategy(
         "sr_breakout", min_touches=1, min_strength=0, volume_mult=0, min_body_atr=-99
     )
-    full = strat.generate_signals(df, CRYPTO_1H)
+    full = strat.generate_signals(df, DAILY)
     assert (full["entry"] != 0).sum() > 10
     for t in range(30, len(df)):
-        part = strat.generate_signals(df.iloc[: t + 1], CRYPTO_1H)
+        part = strat.generate_signals(df.iloc[: t + 1], DAILY)
         pd.testing.assert_series_equal(part.iloc[t], full.iloc[t], check_names=False)

@@ -38,7 +38,6 @@ class OrbIntraday(Strategy):
     name = "orb_intraday"
     description = "First close outside the opening range, stop at the other side, EOD exit"
     timeframes = {"5m", "15m"}
-    markets = {"nse"}
     Params = OrbParams
     param_grid = {
         "or_minutes": [15, 30],

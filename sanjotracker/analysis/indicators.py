@@ -77,7 +77,7 @@ def adx(df: pd.DataFrame, n: int = 14) -> pd.DataFrame:
 def vwap(df: pd.DataFrame, session_tz: str = "UTC") -> pd.Series:
     """Session VWAP that resets at each calendar day in `session_tz`.
 
-    Use "Asia/Kolkata" for NSE (resets every trading day) and "UTC" for crypto.
+    Use "Asia/Kolkata" for NSE (resets every trading day).
     Only meaningful on intraday timeframes.
     """
     typical = (df["high"] + df["low"] + df["close"]) / 3

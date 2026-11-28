@@ -1,4 +1,4 @@
-"""NSE and Binance fee/slippage models, driven by config (nothing hard-coded).
+"""NSE fee/slippage models, driven by config (nothing hard-coded).
 
 NSE charges per executed order (fractions of turnover = price x qty):
 - brokerage = min(brokerage_pct x turnover, brokerage_max_per_order)  (0 for free delivery)
@@ -6,11 +6,9 @@ NSE charges per executed order (fractions of turnover = price x qty):
 - exchange transaction charge, SEBI fee: both sides
 - stamp duty: buy side only
 - GST = gst_pct x (brokerage + exchange + SEBI)
-Binance spot: taker fee x turnover (backtests use market orders = taker).
 Slippage is applied to the fill PRICE (buy higher, sell lower), not as a fee.
 
-Which model a run uses: crypto -> binance_spot; NSE 1d/1w -> nse_delivery;
-NSE 5m/15m/1h -> nse_intraday.
+Which model a run uses: 1d/1w -> nse_delivery; 5m/15m/1h -> nse_intraday.
 """
 
 from __future__ import annotations
@@ -18,7 +16,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Literal
 
-from sanjotracker.config import BinanceCosts, Costs, NseCosts
+from sanjotracker.config import Costs, NseCosts
 
 Side = Literal["buy", "sell"]
 INTRADAY_TFS = {"5m", "15m", "1h"}
@@ -63,16 +61,6 @@ class NseCostModel(CostModel):
         return brokerage + stt + exchange + sebi + stamp + gst
 
 
-class BinanceCostModel(CostModel):
-    def __init__(self, c: BinanceCosts) -> None:
-        self.c = c
-        self.name = "binance_spot"
-        self.slippage_pct = c.slippage_pct
-
-    def charges(self, side: Side, price: float, qty: float) -> float:
-        return self.c.taker_pct * abs(price * qty)
-
-
 class ZeroCostModel(CostModel):
     """Only for tests and 'what if there were no costs' comparisons."""
 
@@ -83,8 +71,6 @@ class ZeroCostModel(CostModel):
 
 
 def cost_model_for(symbol: str, timeframe: str, costs: Costs) -> CostModel:
-    if "/" in symbol:
-        return BinanceCostModel(costs.binance_spot)
     if timeframe in INTRADAY_TFS:
         return NseCostModel(costs.nse_intraday, "nse_intraday")
     return NseCostModel(costs.nse_delivery, "nse_delivery")

@@ -1,8 +1,8 @@
 """Scan the watchlist now and print breakout / retest / approaching events.
 
 Examples:
-    python scripts/scan_now.py swing                     # NSE + crypto, 1d with 1w trend
-    python scripts/scan_now.py intraday --market crypto  # 15m with 1h trend
+    python scripts/scan_now.py swing                     # 1d bars with the 1w trend
+    python scripts/scan_now.py intraday                  # 15m bars with the 1h trend
     python scripts/scan_now.py swing --lookback 5        # events from the last 5 bars
     python scripts/scan_now.py swing --all --no-update   # include counter-trend breakouts
 """
@@ -31,7 +31,6 @@ EMOJI = {
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("style", choices=["swing", "intraday"])
-    p.add_argument("--market", choices=["nse", "crypto", "all"], default="all")
     p.add_argument("--symbols", nargs="*", help="override the watchlist")
     p.add_argument("--lookback", type=int, default=1, help="report events from the last N bars")
     p.add_argument("--min-confidence", type=int, default=0)
@@ -55,7 +54,6 @@ def main() -> int:
     scanner = Scanner(cfg)
     events = scanner.scan(
         args.style,
-        market=args.market,
         symbols=args.symbols,
         update=not args.no_update,
         lookback_bars=args.lookback,
@@ -65,7 +63,7 @@ def main() -> int:
     st = getattr(cfg.styles, args.style)
     print(f"\n{args.style.upper()} scan · {st.primary} bars · {st.trend} trend filter\n")
     print("Benchmarks (daily):")
-    for name, r in scanner.benchmark_regimes(args.market).items():
+    for name, r in scanner.benchmark_regimes().items():
         print(_regime_line(name, r))
 
     if not events:

@@ -15,11 +15,11 @@ EXAMPLE = PROJECT_ROOT / "config.example.yaml"
 def test_example_config_loads() -> None:
     cfg = load_config(EXAMPLE)
     assert len(cfg.watchlist.nse) == 10
-    assert len(cfg.watchlist.crypto) == 5
+    assert cfg.providers.daily == ["nse_mcp", "yfinance_nse"]
     assert all(s.endswith(".NS") for s in cfg.watchlist.nse)
     assert cfg.styles.intraday.primary == "15m"
     assert cfg.styles.swing.trend == "1w"
-    assert cfg.costs.binance_spot.taker_pct == pytest.approx(0.001)
+    assert cfg.costs.nse_delivery.stt_sell_pct == pytest.approx(0.001)
 
 
 def test_trading_day_skips_weekends_and_holidays() -> None:

@@ -99,7 +99,7 @@ def with_retries(
 
 class DataProvider(ABC):
     """Interface every data source implements. Nothing outside data/providers/
-    should know which concrete provider (yfinance, ccxt, broker API) is in use."""
+    should know which concrete provider (NSE MCP, yfinance, broker API) is in use."""
 
     name: str = "base"
     #: seconds to pause between consecutive symbol requests (free-API politeness)

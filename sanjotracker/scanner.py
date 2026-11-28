@@ -22,10 +22,9 @@ from sanjotracker.analysis.breakout import Event, EventType, detect_events, last
 from sanjotracker.analysis.regime import Regime, current_regime
 from sanjotracker.config import Config, get_config
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import Updater, build_updater, market_of, session_tz_for
+from sanjotracker.data.updater import Updater, build_updater, session_tz_for
 
 Style = Literal["swing", "intraday"]
-Market = Literal["nse", "crypto", "all"]
 BENCHMARK_TF = "1d"
 
 
@@ -49,30 +48,24 @@ class Scanner:
     @property
     def updater(self) -> Updater:
         if self._updater is None:
-            names = {"nse": self.cfg.providers.nse, "crypto": self.cfg.providers.crypto}
-            self._updater = build_updater(self.store, names)
+            self._updater = build_updater(self.store, self.cfg.providers)
         return self._updater
 
-    def symbols_for(self, market: Market) -> list[str]:
-        out: list[str] = []
-        if market in ("nse", "all"):
-            out += self.cfg.watchlist.nse
-        if market in ("crypto", "all"):
-            out += self.cfg.watchlist.crypto
-        return list(dict.fromkeys(out))
+    def watchlist(self) -> list[str]:
+        return list(dict.fromkeys(self.cfg.watchlist.nse))
 
-    def benchmark_for(self, symbol: str) -> str:
-        return getattr(self.cfg.benchmarks, market_of(symbol))
+    @property
+    def benchmark(self) -> str:
+        return self.cfg.benchmarks.nse
 
     def _load(self, symbol: str, timeframe: str) -> pd.DataFrame:
         return self.store.load(symbol, timeframe, limit=self.cfg.breakout.scan_history_bars)
 
     def _refresh(self, symbols: list[str], timeframes: list[str]) -> None:
-        benches = list(dict.fromkeys(self.benchmark_for(s) for s in symbols))
         for res in self.updater.update_many(symbols, timeframes):
             if res.error:
                 self.errors[f"{res.symbol} {res.timeframe}"] = f"update: {res.error}"
-        for res in self.updater.update_many(benches, [BENCHMARK_TF]):
+        for res in self.updater.update_many([self.benchmark], [BENCHMARK_TF]):
             if res.error:
                 self.errors[f"{res.symbol} {res.timeframe}"] = f"update: {res.error}"
 
@@ -85,7 +78,7 @@ class Scanner:
         if df.empty:
             raise ValueError(f"no {st.primary} candles stored; run scripts/backfill.py")
         trend_df = self._load(symbol, st.trend)
-        bench = self.store.load(self.benchmark_for(symbol), BENCHMARK_TF)
+        bench = self.store.load(self.benchmark, BENCHMARK_TF)
         self.regimes[symbol] = current_regime(df, st.primary, bench, self.cfg.regime)
         window = max(self.cfg.breakout.retest_within_bars, self.cfg.breakout.failed_within_bars)
         events = detect_events(
@@ -108,7 +101,6 @@ class Scanner:
         self,
         style: Style,
         *,
-        market: Market = "all",
         symbols: list[str] | None = None,
         update: bool = True,
         lookback_bars: int = 1,
@@ -117,7 +109,7 @@ class Scanner:
     ) -> list[Event]:
         """Scan the watchlist (or `symbols`). Returns events, highest confidence first."""
         self.errors, self.regimes = {}, {}
-        syms = list(dict.fromkeys(symbols)) if symbols else self.symbols_for(market)
+        syms = list(dict.fromkeys(symbols)) if symbols else self.watchlist()
         st = getattr(self.cfg.styles, style)
         if update:
             self._refresh(syms, list(dict.fromkeys([st.primary, st.trend])))
@@ -138,16 +130,10 @@ class Scanner:
         logger.info("{} scan: {} symbols, {} events", style, len(syms), len(events))
         return events
 
-    def benchmark_regimes(self, market: Market = "all") -> dict[str, Regime]:
-        """Regime of each benchmark on its daily chart (for the header line)."""
-        out: dict[str, Regime] = {}
-        for m in ("nse", "crypto"):
-            if market not in (m, "all"):
-                continue
-            sym = getattr(self.cfg.benchmarks, m)
-            df = self.store.load(sym, BENCHMARK_TF)
-            out[sym] = current_regime(df, BENCHMARK_TF, df, self.cfg.regime)
-        return out
+    def benchmark_regimes(self) -> dict[str, Regime]:
+        """Regime of the benchmark (NIFTY 50) on its daily chart (for the header line)."""
+        df = self.store.load(self.benchmark, BENCHMARK_TF)
+        return {self.benchmark: current_regime(df, BENCHMARK_TF, df, self.cfg.regime)}
 
 
 def scan(style: Style, **kwargs) -> list[Event]:  # noqa: ANN003

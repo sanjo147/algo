@@ -17,9 +17,6 @@ with st.container(horizontal=True, vertical_alignment="bottom"):
         key="sc_style",
         help="Swing: 1d bars with the 1w trend. Intraday: 15m bars with the 1h trend.",
     )
-    market = st.segmented_control(
-        "Market", ["all", "nse", "crypto"], default="all", required=True, key="sc_market"
-    )
     lookback = st.slider("Bars back", 1, 20, 3, key="sc_lookback")
     min_conf = st.slider("Min confidence", 0, 100, 0, step=5, key="sc_conf")
     counter = st.toggle("Counter-trend breakouts", key="sc_counter")
@@ -27,14 +24,12 @@ with st.container(horizontal=True, vertical_alignment="bottom"):
 
 st_cfg = getattr(c.styles, style)
 if fetch:
-    syms = (
-        [*c.watchlist.nse, *c.watchlist.crypto] if market == "all" else getattr(c.watchlist, market)
-    )
+    syms = list(c.watchlist.nse)
     with st.spinner(f"Downloading {st_cfg.primary} and {st_cfg.trend} candles…"):
         d.fetch_latest(syms, [st_cfg.primary, st_cfg.trend])
 
 with st.spinner("Scanning the watchlist…"):
-    events, errors, regimes = d.scan(db, style, market, lookback, counter)
+    events, errors, regimes = d.scan(db, style, lookback, counter)
 
 st.subheader("Events")
 st.caption(
@@ -82,8 +77,6 @@ st.caption("Daily data. Distance to the nearest pivot zone above and below, in %
 wl = d.watchlist_table(db, tuple(d.all_symbols(c)))
 if not wl.empty and "to_support_pct" in wl:
     wl = wl[wl["status"] == "ok"].copy()
-    if market != "all":
-        wl = wl[wl["market"] == market]
     wl["nearest_pct"] = wl[["to_support_pct", "to_resistance_pct"]].abs().min(axis=1)
     within = st.slider("Within %", 0.5, 10.0, 3.0, step=0.5, key="sc_within")
     near = wl[wl["nearest_pct"] <= within].sort_values("nearest_pct")

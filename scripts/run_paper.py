@@ -39,11 +39,7 @@ def main() -> int:
     store = CandleStore(cfg.db_file)
     if not args.show:
         notifier = NullNotifier() if args.no_telegram else build_notifier(cfg)
-        updater = (
-            None
-            if args.no_update
-            else build_updater(store, {"nse": cfg.providers.nse, "crypto": cfg.providers.crypto})
-        )
+        updater = None if args.no_update else build_updater(store, cfg.providers)
         res = PaperTrader(cfg, store, notifier, updater).run()
         print(f"\nStepped {res.setups} setups: {len(res.opened)} opened, {len(res.closed)} closed")
         for k, v in res.errors.items():

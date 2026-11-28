@@ -5,7 +5,6 @@ import streamlit as st
 
 from sanjotracker import dashboard as d
 from sanjotracker.charts import trade_figure
-from sanjotracker.data.updater import market_of
 
 c = d.cfg()
 db = d.db_key()
@@ -110,7 +109,7 @@ else:
         candles = d.candles(db, t["symbol"], t["timeframe"])
         if not candles.empty:
             st.plotly_chart(
-                trade_figure(candles, t, is_nse=market_of(t["symbol"]) == "nse"),
+                trade_figure(candles, t, is_nse=True),
                 alt=f"Chart of paper trade {tid}",
             )
 

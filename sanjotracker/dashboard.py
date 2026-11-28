@@ -23,7 +23,7 @@ from sanjotracker.backtest.montecarlo import monte_carlo
 from sanjotracker.backtest.runner import run_one
 from sanjotracker.config import Config, load_config
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import build_updater, market_of, session_tz_for
+from sanjotracker.data.updater import build_updater, session_tz_for
 from sanjotracker.scanner import Scanner
 from sanjotracker.strategies import STRATEGIES
 
@@ -81,7 +81,7 @@ def db_key() -> str:
 
 def all_symbols(c: Config | None = None) -> list[str]:
     c = c or cfg()
-    syms = [*c.watchlist.nse, *c.watchlist.crypto, c.benchmarks.nse, c.benchmarks.crypto]
+    syms = [*c.watchlist.nse, c.benchmarks.nse]
     return list(dict.fromkeys(syms))
 
 
@@ -127,7 +127,7 @@ def recent_events(db: str, symbol: str, timeframe: str, bars: int) -> pd.DataFra
 def regime_of(db: str, symbol: str, timeframe: str = "1d") -> Regime:
     c = cfg()
     df = candles(db, symbol, timeframe)
-    bench = candles(db, getattr(c.benchmarks, market_of(symbol)), "1d")
+    bench = candles(db, c.benchmarks.nse, "1d")
     return current_regime(df, timeframe, bench, c.regime)
 
 
@@ -138,7 +138,7 @@ def watchlist_table(db: str, symbols: tuple[str, ...]) -> pd.DataFrame:
     for sym in symbols:
         df = candles(db, sym, "1d", 400)
         if df.empty:
-            rows.append({"symbol": sym, "market": market_of(sym), "status": "no data"})
+            rows.append({"symbol": sym, "status": "no data"})
             continue
         price = float(df["close"].iloc[-1])
         prev = float(df["close"].iloc[-2]) if len(df) > 1 else price
@@ -150,7 +150,6 @@ def watchlist_table(db: str, symbols: tuple[str, ...]) -> pd.DataFrame:
         rows.append(
             {
                 "symbol": sym,
-                "market": market_of(sym),
                 "last": price,
                 "change_pct": (price / prev - 1) * 100,
                 "trend": r.trend,
@@ -174,7 +173,7 @@ def watchlist_table(db: str, symbols: tuple[str, ...]) -> pd.DataFrame:
 def fetch_latest(symbols: list[str], timeframes: list[str]) -> pd.DataFrame:
     """Network: bring candles up to date (button-triggered only). Clears caches."""
     c = cfg()
-    up = build_updater(store(), {"nse": c.providers.nse, "crypto": c.providers.crypto})
+    up = build_updater(store(), c.providers)
     res = up.update_many(symbols, timeframes)
     st.cache_data.clear()
     return pd.DataFrame([r.model_dump() for r in res])
@@ -191,12 +190,11 @@ def alerts_since(db: str, hours: int, limit: int = 500) -> pd.DataFrame:
 
 @st.cache_data(ttl=300, max_entries=20, show_spinner=False)
 def scan(
-    db: str, style: str, market: str, lookback: int, counter_trend: bool
+    db: str, style: str, lookback: int, counter_trend: bool
 ) -> tuple[pd.DataFrame, dict[str, str], dict[str, dict]]:
     sc = Scanner(cfg(), _store(db))
     ev = sc.scan(
         style,  # type: ignore[arg-type]
-        market=market,  # type: ignore[arg-type]
         update=False,
         lookback_bars=lookback,
         include_counter_trend=counter_trend,
@@ -268,7 +266,7 @@ def walkforward(db: str, strategy: str, symbol: str, timeframe: str) -> dict:
 
     c = cfg()
     bt = c.backtest
-    bench = candles(db, getattr(c.benchmarks, market_of(symbol)), "1d")
+    bench = candles(db, c.benchmarks.nse, "1d")
     wf = walk_forward(
         candles(db, symbol, timeframe),
         STRATEGIES[strategy],
@@ -334,7 +332,7 @@ def paper_step(notify: bool = True) -> dict:
     from sanjotracker.paper.trader import PaperTrader
 
     c = cfg()
-    up = build_updater(store(), {"nse": c.providers.nse, "crypto": c.providers.crypto})
+    up = build_updater(store(), c.providers)
     notifier = build_notifier(c) if notify else NullNotifier()
     res = PaperTrader(c, store(), notifier, up).run()
     st.cache_data.clear()

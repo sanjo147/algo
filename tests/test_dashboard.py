@@ -16,14 +16,14 @@ from tests.conftest import T0, make_candles
 from tests.test_alerts import make_event
 
 APP = str(PROJECT_ROOT / "app" / "Home.py")
-SYM = "AAA/USDT"
+SYM = "AAA.NS"
 
 
 @pytest.fixture
 def app_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     raw = yaml.safe_load((PROJECT_ROOT / "config.example.yaml").read_text(encoding="utf-8"))
-    raw["watchlist"] = {"nse": [], "crypto": [SYM]}
-    raw["benchmarks"] = {"nse": "^NSEI", "crypto": SYM}
+    raw["watchlist"] = {"nse": [SYM]}
+    raw["benchmarks"] = {"nse": SYM}  # the test DB has no ^NSEI; use the stock as benchmark
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     db = tmp_path / "test.db"
@@ -125,10 +125,10 @@ def test_settings_saves_thresholds_to_the_temp_config(app_env: Path) -> None:
 
 def test_settings_rejects_bad_ticker(app_env: Path) -> None:
     at = _run("settings")
-    at.multiselect(key="set_nse").set_value(["NOTATICKER"])
+    at.multiselect(key="set_nse").set_value(["NOT A TICKER"])
     at.button(key="FormSubmitter:wl_form-Save watchlist").click().run()
     assert at.error and "Not valid" in at.error[0].value
-    assert load_config(app_env).watchlist.nse == []
+    assert load_config(app_env).watchlist.nse == [SYM]  # unchanged
 
 
 def test_paper_page_shows_account(app_env: Path) -> None:

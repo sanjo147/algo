@@ -35,17 +35,17 @@ class AppSettings(BaseModel):
 
 class Watchlist(BaseModel):
     nse: list[str] = Field(default_factory=list)
-    crypto: list[str] = Field(default_factory=list)
 
 
 class Benchmarks(BaseModel):
     nse: str = "^NSEI"
-    crypto: str = "BTC/USDT"
 
 
 class Providers(BaseModel):
-    nse: str = "yfinance_nse"
-    crypto: str = "binance_ccxt"
+    """Ordered fallback chains. NSE's MCP has daily data only, so intraday uses Yahoo."""
+
+    daily: list[str] = Field(default_factory=lambda: ["nse_mcp", "yfinance_nse"])
+    intraday: list[str] = Field(default_factory=lambda: ["yfinance_nse"])
 
 
 class StyleTimeframes(BaseModel):
@@ -124,16 +124,9 @@ class NseCosts(BaseModel):
     slippage_pct: float
 
 
-class BinanceCosts(BaseModel):
-    maker_pct: float
-    taker_pct: float
-    slippage_pct: float
-
-
 class Costs(BaseModel):
     nse_intraday: NseCosts
     nse_delivery: NseCosts
-    binance_spot: BinanceCosts
 
 
 class QuietHours(BaseModel):
@@ -162,8 +155,7 @@ class AlertsConfig(BaseModel):
 
 
 class PaperSetup(BaseModel):
-    """One paper-traded strategy. `symbols` may name a watchlist: "watchlist:nse",
-    "watchlist:crypto" or "watchlist" (both)."""
+    """One paper-traded strategy. `symbols`: tickers, or "watchlist" for all of it."""
 
     strategy: str
     timeframe: str = "1d"
@@ -290,17 +282,15 @@ def get_secrets() -> Secrets:
     return Secrets()
 
 
-def _watchlist_block(nse: list[str], crypto: list[str], comments: dict[str, str]) -> str:
-    lines = ["watchlist:"]
-    for name, syms in (("nse", nse), ("crypto", crypto)):
-        lines.append(f"  {name}:" if syms else f"  {name}: []")
-        for s in syms:
-            c = comments.get(s)
-            lines.append(f"    - {s}" + (f"        # {c}" if c else ""))
+def _watchlist_block(nse: list[str], comments: dict[str, str]) -> str:
+    lines = ["watchlist:", "  nse:" if nse else "  nse: []"]
+    for s in nse:
+        c = comments.get(s)
+        lines.append(f"    - {s}" + (f"        # {c}" if c else ""))
     return "\n".join(lines) + "\n"
 
 
-def save_watchlist(nse: list[str], crypto: list[str], path: str | Path | None = None) -> Path:
+def save_watchlist(nse: list[str], path: str | Path | None = None) -> Path:
     """Rewrite only the `watchlist:` block of config.yaml (other comments are kept).
 
     If config.yaml doesn't exist yet it is created from config.example.yaml.
@@ -312,14 +302,14 @@ def save_watchlist(nse: list[str], crypto: list[str], path: str | Path | None = 
     if m is None:
         raise ValueError(f"no top-level 'watchlist:' section in {target}")
     comments = dict(re.findall(r"^\s+-\s+(\S+)\s+#\s*(.*)$", m.group(0), flags=re.M))
-    block = _watchlist_block(nse, crypto, comments)
+    block = _watchlist_block(nse, comments)
     trailing = "\n" if m.group(0).endswith("\n\n") else ""
     new = text[: m.start()] + block + trailing + text[m.end() :]
     Config.model_validate(yaml.safe_load(new))  # never write a config that won't load
     shutil.copyfile(target, target.with_suffix(".yaml.bak"))
     target.write_text(new, encoding="utf-8")
     get_config.cache_clear()
-    logger.info("watchlist saved to {} ({} NSE, {} crypto)", target, len(nse), len(crypto))
+    logger.info("watchlist saved to {} ({} symbols)", target, len(nse))
     return target
 
 

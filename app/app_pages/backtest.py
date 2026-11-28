@@ -12,7 +12,6 @@ from sanjotracker import dashboard as d
 from sanjotracker.backtest.costs import cost_model_for
 from sanjotracker.backtest.runner import run_leaderboard
 from sanjotracker.charts import equity_chart
-from sanjotracker.data.updater import market_of
 from sanjotracker.strategies import STRATEGIES
 
 c = d.cfg()
@@ -46,7 +45,7 @@ def pick_target(prefix: str) -> tuple[str, str, str]:
             help="\n\n".join(f"**{k}**: {v.description}" for k, v in STRATEGIES.items()),
         )
         cls = STRATEGIES[name]
-        syms = [s for s in d.all_symbols(c) if market_of(s) in cls.markets]
+        syms = d.all_symbols(c)
         symbol = st.selectbox("Symbol", syms, key=f"{prefix}_symbol")
         tfs = [t for t in ("5m", "15m", "1h", "1d", "1w") if t in cls.timeframes]
         tf = st.segmented_control(

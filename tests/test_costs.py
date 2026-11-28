@@ -1,9 +1,8 @@
-"""Fee models: hand-checked NSE and Binance charges."""
+"""Fee models: hand-checked NSE delivery and intraday charges."""
 
 import pytest
 
 from sanjotracker.backtest.costs import (
-    BinanceCostModel,
     NseCostModel,
     ZeroCostModel,
     cost_model_for,
@@ -36,16 +35,14 @@ def test_nse_intraday_brokerage_cap_and_sell_only_stt() -> None:
     assert small < 1
 
 
-def test_binance_taker_fee_and_slippage() -> None:
-    m = BinanceCostModel(COSTS.binance_spot)
-    assert m.charges("buy", 50_000, 0.1) == pytest.approx(5.0)
+def test_slippage_moves_fill_against_you() -> None:
+    m = NseCostModel(COSTS.nse_delivery, "nse_delivery")
     assert m.fill_price("buy", 100) == pytest.approx(100.05)
     assert m.fill_price("sell", 100) == pytest.approx(99.95)
-    assert m.round_trip_pct() == pytest.approx(0.003)
+    assert 0.003 < m.round_trip_pct() < 0.004  # ~0.32% delivery round trip
 
 
 def test_model_selection() -> None:
-    assert cost_model_for("BTC/USDT", "15m", COSTS).name == "binance_spot"
     assert cost_model_for("TCS.NS", "1d", COSTS).name == "nse_delivery"
     assert cost_model_for("TCS.NS", "15m", COSTS).name == "nse_intraday"
     assert ZeroCostModel().charges("buy", 100, 10) == 0

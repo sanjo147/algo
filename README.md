@@ -1,11 +1,15 @@
 # SanjoTracker
 
-Personal NSE + crypto tracker: support/resistance zones, breakout detection,
-strategy backtests, and alerts to Telegram and a Streamlit dashboard.
+Personal Indian stock market (NSE) tracker: support/resistance zones, breakout
+detection, strategy backtests, paper trading, and alerts to Telegram and a
+Streamlit dashboard.
 
 > Analysis and alerts only. There is no order-placement code.
-> Free yfinance NSE data is delayed ~15 min. Treat intraday alerts as practice
+> Daily data comes from NSE's official MCP servers (free), falling back to Yahoo.
+> Intraday data is Yahoo's (~15 min delayed): treat intraday alerts as practice
 > until a broker API is plugged in.
+
+**First time after the NSE-only switch? See [MANUAL_STEPS.md](MANUAL_STEPS.md).**
 
 ## Status
 
@@ -61,24 +65,44 @@ streamlit run app/Home.py     # dashboard, opens http://localhost:8501
 ### Download market data
 
 ```bash
-python scripts/backfill.py                                  # whole watchlist, all timeframes
-python scripts/backfill.py --market crypto --timeframes 1d  # a subset
-python scripts/backfill.py --symbols RELIANCE.NS --timeframes 15m
+python scripts/backfill.py                                 # whole watchlist, all timeframes
+python scripts/backfill.py --timeframes 1d 1w              # a subset
+python scripts/backfill.py --symbols RELIANCE TCS --timeframes 15m
+python scripts/backfill.py --full                          # wipe and re-download
 ```
 
 Re-running only fetches candles that are missing. Data goes to `data/sanjotracker.db`.
 
-Free-data limits: yfinance keeps 5m/15m for ~60 days and 1h for ~2 years.
-Run backfill (or the scheduler, Phase 4) at least every few weeks so intraday
-history keeps growing in your local DB instead of leaving gaps.
-Crypto data comes from `data-api.binance.vision`, Binance's official public
-market-data host, because `api.binance.com` is blocked by some Indian ISPs.
+### Where the data comes from
+
+| Timeframes | First choice | Fallback |
+|---|---|---|
+| 1d, 1w | **NSE's official MCP** (`mcp.nseindia.in`, Bhavcopy, ~5 years) | Yahoo (`yfinance`, 10+ years) |
+| 5m, 15m, 1h | Yahoo | none (NSE's MCP has no intraday candles) |
+| ^NSEI (index) | Yahoo | none (the Bhavcopy covers stocks only) |
+
+- The chains are under `providers:` in `config.yaml`. The first source that answers
+  is used, and each candle records which source it came from.
+- Both sources are adjusted for splits and bonuses but **not dividends**, so they line
+  up. NSE's Bhavcopy is raw, so it is back-adjusted using NSE's own
+  corporate-action factors.
+- NSE publishes the Bhavcopy after the close. Until it does, the newest daily bar
+  comes from Yahoo and is replaced by NSE's on the next update.
+- If your network blocks NSE (some college and office firewalls intercept HTTPS),
+  you'll see one warning and the app carries on with Yahoo. Check with
+  `python scripts/check_nse_mcp.py`.
+- NSE's terms: informational and educational use only. Fine for this personal
+  tool; don't resell the data or train AI models on it.
+
+Free-data limits: Yahoo keeps 5m/15m for ~60 days and 1h for ~2 years. Run backfill
+(or the scheduler) at least every few weeks so intraday history keeps growing in
+your local DB.
 
 ### Check support / resistance visually
 
 ```bash
 python scripts/plot_levels.py RELIANCE.NS 1d --open
-python scripts/plot_levels.py BTC/USDT 15m --bars 400 --open
+python scripts/plot_levels.py TCS 15m --bars 400 --open
 ```
 
 Saves `reports/levels_<symbol>_<tf>.html` (dark candlestick chart) and prints the
@@ -95,11 +119,11 @@ Tune these in `config.yaml` under `levels:`.
 
 ```bash
 python scripts/scan_now.py swing                     # 1d bars, 1w trend filter
-python scripts/scan_now.py intraday --market crypto  # 15m bars, 1h trend filter
+python scripts/scan_now.py intraday                  # 15m bars, 1h trend filter
 python scripts/scan_now.py swing --lookback 5 --reasons
 ```
 
-Prints the benchmark regime (NIFTY / BTC vs their 200 EMA, ADX trend, volatility)
+Prints the benchmark regime (NIFTY vs its 200 EMA, ADX trend, volatility)
 and a table of events on the last closed bar (`--lookback N` for the last N):
 
 | Event | Meaning |
@@ -139,7 +163,7 @@ own close/volume, and higher-timeframe bars that had closed by then.
    ```
 
 The bot answers **only your chat ID**. Commands: `/start`, `/watchlist`,
-`/add TCS.NS`, `/remove TCS.NS`, `/levels RELIANCE.NS`, `/status`.
+`/add TCS` (`.NS` is added for you), `/remove TCS`, `/levels RELIANCE`, `/status`.
 `/add` checks that the ticker returns data first. It edits only the `watchlist:`
 section of `config.yaml` (created from the example if missing; the old file is
 kept as `config.yaml.bak`).
@@ -154,13 +178,11 @@ python scripts/run_scheduler.py --keep-awake
 |---|---|---|
 | nse_intraday | Mon–Fri 09:32–15:32, every 15 min | 15m bars, 1h trend |
 | nse_swing | Mon–Fri 15:46 + daily summary | 1d bars, 1w trend |
-| crypto_intraday | every 15 min, 24/7 | 15m bars, 1h trend |
-| crypto_swing | daily 05:35 (after the 00:00 UTC close) | 1d bars, 1w trend |
 
 NSE jobs skip weekends and `nse_market.holidays`. Keep that list updated each year
 from the NSE holiday calendar.
 
-Try one job right now without waiting: `python scripts/run_scheduler.py --once crypto_intraday`
+Try one job right now without waiting: `python scripts/run_scheduler.py --once nse_swing`
 (add `--no-telegram` to only log).
 
 Alert rules (`alerts:` in config): confidence ≥ `min_confidence` (60), the same
@@ -190,7 +212,7 @@ Every alert is saved in the `alerts` table, which the dashboard's Alerts page sh
 ```bash
 python scripts/run_backtest.py --list                          # strategies + parameters
 python scripts/run_backtest.py sr_breakout RELIANCE.NS 1d      # one backtest
-python scripts/run_backtest.py ema_crossover BTC/USDT 1h --param fast=10 --plot
+python scripts/run_backtest.py ema_crossover TCS 1h --param fast=10 --plot
 python scripts/run_backtest.py sr_breakout RELIANCE.NS 1d --walkforward
 python scripts/run_backtest.py --leaderboard                   # everything, ~1 min
 ```
@@ -206,7 +228,7 @@ python scripts/run_backtest.py --leaderboard                   # everything, ~1 
 How the engine works:
 
 - Signals use bar t's close; orders fill at bar t+1's **open** with slippage.
-- Every trade pays the fees in `costs:` (NSE delivery / intraday / Binance).
+- Every trade pays the fees in `costs:` (NSE delivery or intraday).
 - Stops and targets trigger inside the bar. If a bar hits both, the stop counts.
 - Each trade risks 1% of equity, with no leverage.
 - Shorts only on NSE intraday, which is squared off at 15:30.
@@ -230,8 +252,8 @@ How to read it honestly:
   worse than the full-history one. That gap is the overfitting.
 - `<20 trades` or `<1 year of data` rows are shown but not ranked. Free intraday
   data is only ~59 days, too short to judge.
-- Fees matter. Binance spot costs ~0.30% per round trip; NSE delivery ~0.32%.
-  On a 15m chart, that can be most of a stop distance.
+- Fees matter. NSE delivery costs ~0.32% per round trip (STT both sides) and
+  intraday ~0.2%. On a 15m chart, that can be most of a stop distance.
 
 ## Dashboard (Phase 6)
 
@@ -243,7 +265,7 @@ streamlit run app/Home.py
 
 | Page | What's there |
 |---|---|
-| Alerts | NIFTY / BTC regime badges, live alert feed (refreshes every 60 s; click a row for the reasons and its chart), watchlist with 30-day sparklines and the nearest support/resistance |
+| Alerts | NIFTY regime badges, live alert feed (refreshes every 60 s; click a row for the reasons and its chart), watchlist with 30-day sparklines and the nearest support/resistance |
 | Charts | Candlesticks with S/R zones, pivots, breakout/retest markers, stored alerts, optional reference levels / EMA 200 / Bollinger / VWAP, any symbol and timeframe |
 | Scanner | Swing or intraday scan with filters, plus symbols within X% of a strong level |
 | Backtest | One run with costs (metrics, equity vs buy & hold, trades, regimes, Monte Carlo, parameter heatmap), walk-forward, and the latest leaderboard |
@@ -308,7 +330,7 @@ Dashboard:
 ```
 sanjotracker/
   config.py         typed config from config.yaml + .env
-  data/providers/   the only place yfinance / ccxt are imported
+  data/providers/   the only place data sources are touched (NSE MCP, yfinance)
   data/             SQLite store + incremental updater
   analysis/         indicators, S/R levels, breakouts, regime
   strategies/       strategy implementations
@@ -323,6 +345,6 @@ tests/              pytest
 ## Rules this codebase follows
 
 - No lookahead: signals on bar *t* use data up to *t*'s close and fill at *t+1* open.
-- Every backtest includes NSE / Binance costs from config.
+- Every backtest includes NSE costs from config.
 - Secrets live only in `.env`.
 - Timestamps are stored in UTC and shown in Asia/Kolkata.

@@ -18,6 +18,7 @@ import pandas as pd
 from loguru import logger
 from pydantic import BaseModel
 
+from sanjotracker.config import Providers
 from sanjotracker.data.providers.base import DEFAULT_BACKFILL, DataProvider, utcnow
 from sanjotracker.data.store import CandleStore
 
@@ -34,14 +35,27 @@ class UpdateResult(BaseModel):
     error: str | None = None
 
 
+SESSION_TZ = "Asia/Kolkata"
+
+
 def market_of(symbol: str) -> str:
-    """'crypto' for pair symbols like BTC/USDT, otherwise 'nse'."""
-    return "crypto" if "/" in symbol else "nse"
+    """Every symbol is on NSE (.NS stocks, ^ indices). Pairs like BTC/USDT are refused."""
+    if "/" in symbol:
+        raise ValueError(f"{symbol!r} looks like a crypto pair; SanjoTracker is NSE-only")
+    return "nse"
 
 
 def session_tz_for(symbol: str) -> str:
-    """Timezone whose calendar day defines a 'session' (VWAP reset, previous-day levels)."""
-    return "UTC" if market_of(symbol) == "crypto" else "Asia/Kolkata"
+    """Timezone whose calendar day defines a session (VWAP reset, previous-day levels)."""
+    return SESSION_TZ
+
+
+def normalize_symbol(symbol: str) -> str:
+    """'tcs' -> 'TCS.NS'; indices (^NSEI) and '.NS' symbols are kept as they are."""
+    s = symbol.strip().upper()
+    if not s or s.startswith("^") or s.endswith(".NS"):
+        return s
+    return f"{s}.NS"
 
 
 class Updater:
@@ -154,8 +168,8 @@ class Updater:
         return results
 
 
-def build_updater(store: CandleStore, provider_names: dict[str, str]) -> Updater:
-    """Create an Updater from config provider names, e.g. {"nse": "yfinance_nse"}."""
-    from sanjotracker.data.providers import get_provider
+def build_updater(store: CandleStore, providers: Providers) -> Updater:
+    """Create an Updater from the config's provider chains (`cfg.providers`)."""
+    from sanjotracker.data.providers import build_nse_provider
 
-    return Updater(store, {m: get_provider(n) for m, n in provider_names.items()})
+    return Updater(store, {"nse": build_nse_provider(providers)})

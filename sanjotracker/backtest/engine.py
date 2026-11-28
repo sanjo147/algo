@@ -10,8 +10,8 @@ Per bar i, in this order:
 5. mark equity at bar i's close.
 
 Sizing: risk `risk_pct` of current equity between fill and stop, capped at 100%
-of equity (no leverage). NSE quantities are whole shares; crypto is fractional.
-Shorts only where allowed (default: NSE intraday only — no shorting delivery or spot).
+of equity (no leverage). Quantities are whole shares.
+Shorts only where allowed (default: NSE intraday only, no shorting delivery).
 """
 
 from __future__ import annotations
@@ -116,10 +116,9 @@ def run_backtest(
     warm-up history for indicators. Data after `end` is cut off BEFORE the
     strategy runs, so it can't leak in.
     """
-    nse_intraday = ctx.market == "nse" and ctx.timeframe in INTRADAY_TFS
+    nse_intraday = ctx.timeframe in INTRADAY_TFS
     allow_short = nse_intraday if allow_short is None else allow_short
     eod_exit = nse_intraday if eod_exit is None else eod_exit
-    fractional = ctx.market == "crypto"
 
     d = df.iloc[:end].reset_index(drop=True) if end is not None else df.reset_index(drop=True)
     n = len(d)
@@ -197,7 +196,7 @@ def run_backtest(
             return
         eq = cash
         qty = min(eq * risk_pct / 100 / per_unit, eq * 0.999 / fill)
-        qty = round(qty, 6) if fractional else math.floor(qty)
+        qty = math.floor(qty)
         if qty <= 0:
             return
         fees = cost.charges(side, fill, qty)

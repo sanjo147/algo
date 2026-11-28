@@ -8,7 +8,7 @@ from sanjotracker import dashboard as d
 from sanjotracker.analysis.indicators import bollinger, ema, vwap
 from sanjotracker.analysis.levels import nearest_levels
 from sanjotracker.charts import levels_chart
-from sanjotracker.data.updater import market_of, session_tz_for
+from sanjotracker.data.updater import session_tz_for
 
 c = d.cfg()
 db = d.db_key()
@@ -49,7 +49,7 @@ if df.empty:
 
 levels, pivots = d.levels_and_pivots(db, symbol, timeframe)
 shown = df.tail(bars).reset_index(drop=True)
-is_nse = market_of(symbol) == "nse"
+is_nse = True
 intraday = timeframe in d.INTRADAY
 
 markers = None

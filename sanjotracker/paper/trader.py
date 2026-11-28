@@ -35,7 +35,7 @@ from sanjotracker.backtest.runner import make_context
 from sanjotracker.config import Config, PaperSetup
 from sanjotracker.data.providers.base import TIMEFRAME_DELTAS
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import Updater, market_of
+from sanjotracker.data.updater import Updater, normalize_symbol
 from sanjotracker.paper.book import PaperBook, epoch
 from sanjotracker.strategies import STRATEGIES, Strategy, StrategyContext
 
@@ -56,8 +56,8 @@ class AtrRiskOverride(Strategy):
     def max_hold(self) -> int | None:
         return self.inner.max_hold()
 
-    def supports(self, market: str, timeframe: str) -> bool:
-        return self.inner.supports(market, timeframe)
+    def supports(self, timeframe: str) -> bool:
+        return self.inner.supports(timeframe)
 
     def label(self) -> str:
         extra = []
@@ -91,14 +91,7 @@ class PaperRunResult:
 def expand_symbols(setup: PaperSetup, cfg: Config) -> list[str]:
     out: list[str] = []
     for s in setup.symbols:
-        if s == "watchlist":
-            out += [*cfg.watchlist.nse, *cfg.watchlist.crypto]
-        elif s == "watchlist:nse":
-            out += cfg.watchlist.nse
-        elif s == "watchlist:crypto":
-            out += cfg.watchlist.crypto
-        else:
-            out.append(s.upper())
+        out += list(cfg.watchlist.nse) if s == "watchlist" else [normalize_symbol(s)]
     return list(dict.fromkeys(out))
 
 
@@ -186,7 +179,6 @@ class PaperTrader:
     def run(
         self,
         timeframes: set[str] | None = None,
-        markets: set[str] | None = None,
         now: datetime | None = None,
     ) -> PaperRunResult:
         """One paper step for every configured setup (optionally filtered)."""
@@ -203,9 +195,7 @@ class PaperTrader:
                 out.errors[setup.strategy] = str(exc)
                 continue
             for sym in expand_symbols(setup, self.cfg):
-                if markets and market_of(sym) not in markets:
-                    continue
-                if not strat.supports(market_of(sym), setup.timeframe):
+                if not strat.supports(setup.timeframe):
                     continue
                 try:
                     self._run_one(strat, sym, setup.timeframe, now, out)
@@ -250,7 +240,7 @@ class PaperTrader:
         if start_idx >= len(df):
             self.book.touch_setup(sid)
             return  # nothing has closed since the setup started
-        bench = self.store.load(getattr(self.cfg.benchmarks, market_of(symbol)), "1d")
+        bench = self.store.load(self.cfg.benchmarks.nse, "1d")
         res = run_backtest(
             df,
             strat,

@@ -23,7 +23,7 @@ from sanjotracker.backtest.metrics import compute_metrics, regime_breakdown
 from sanjotracker.backtest.montecarlo import monte_carlo
 from sanjotracker.config import PROJECT_ROOT, Config
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import market_of, session_tz_for
+from sanjotracker.data.updater import session_tz_for
 from sanjotracker.strategies import STRATEGIES, Strategy, StrategyContext
 
 LEADERBOARD_COLUMNS = [
@@ -85,7 +85,6 @@ def make_context(cfg: Config, symbol: str, timeframe: str) -> StrategyContext:
         symbol=symbol,
         timeframe=timeframe,
         session_tz=session_tz_for(symbol),
-        market=market_of(symbol),
         levels=cfg.levels,
         breakout=cfg.breakout,
     )
@@ -103,7 +102,7 @@ def run_one(
     df = store.load(symbol, timeframe) if df is None else df
     if df.empty:
         raise ValueError(f"no {timeframe} candles for {symbol}; run scripts/backfill.py")
-    bench = store.load(getattr(cfg.benchmarks, market_of(symbol)), "1d")
+    bench = store.load(cfg.benchmarks.nse, "1d")
     return run_backtest(
         df,
         strategy,
@@ -228,16 +227,15 @@ def run_leaderboard(
     in-sample optimisation bias). Ranked by Sharpe among runs with >= min_trades."""
     bt = cfg.backtest
     names = strategies or list(STRATEGIES)
-    syms = symbols or [*cfg.watchlist.nse, *cfg.watchlist.crypto]
+    syms = symbols or list(cfg.watchlist.nse)
     tfs = timeframes or cfg.timeframes
     results = ResultStore(store.engine) if save else None
     batch_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     rows, skipped = [], []
 
     for sym in syms:
-        market = market_of(sym)
         for tf in tfs:
-            todo = [n for n in names if STRATEGIES[n]().supports(market, tf)]
+            todo = [n for n in names if STRATEGIES[n]().supports(tf)]
             if not todo:
                 continue
             df = store.load(sym, tf)

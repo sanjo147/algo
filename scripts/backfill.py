@@ -2,8 +2,11 @@
 
 Examples:
     python scripts/backfill.py                          # everything in config
-    python scripts/backfill.py --market crypto --timeframes 1d 1w
-    python scripts/backfill.py --symbols RELIANCE.NS BTC/USDT --timeframes 15m
+    python scripts/backfill.py --timeframes 1d 1w
+    python scripts/backfill.py --symbols RELIANCE TCS --timeframes 15m
+    python scripts/backfill.py --full                   # wipe and re-download everything
+
+Daily/weekly come from NSE's official MCP (falling back to Yahoo), intraday from Yahoo.
 """
 
 from __future__ import annotations
@@ -14,16 +17,18 @@ import pandas as pd
 
 from sanjotracker.config import get_config
 from sanjotracker.data.store import CandleStore
-from sanjotracker.data.updater import build_updater, market_of
+from sanjotracker.data.updater import build_updater, normalize_symbol
 from sanjotracker.log import setup_logging
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    p.add_argument("--market", choices=["nse", "crypto", "all"], default="all")
     p.add_argument("--symbols", nargs="*", help="override the watchlist")
     p.add_argument("--timeframes", nargs="*", help="default: all timeframes in config")
-    p.add_argument("--no-benchmarks", action="store_true", help="skip ^NSEI / BTC benchmark")
+    p.add_argument("--no-benchmarks", action="store_true", help="skip the ^NSEI benchmark")
+    p.add_argument(
+        "--full", action="store_true", help="delete stored candles first and re-download"
+    )
     return p.parse_args()
 
 
@@ -33,22 +38,22 @@ def main() -> int:
     cfg = get_config()
 
     if args.symbols:
-        symbols = list(args.symbols)
+        symbols = [normalize_symbol(s) for s in args.symbols]
     else:
-        symbols = []
-        if args.market in ("nse", "all"):
-            symbols += cfg.watchlist.nse
-            if not args.no_benchmarks:
-                symbols.append(cfg.benchmarks.nse)
-        if args.market in ("crypto", "all"):
-            symbols += cfg.watchlist.crypto
-    symbols = list(dict.fromkeys(symbols))  # dedupe, keep order (BTC is also the benchmark)
+        symbols = list(cfg.watchlist.nse)
+        if not args.no_benchmarks:
+            symbols.append(cfg.benchmarks.nse)
+    symbols = list(dict.fromkeys(symbols))
+    timeframes = args.timeframes or cfg.timeframes
 
-    markets = {market_of(s) for s in symbols}
-    names = {m: getattr(cfg.providers, m) for m in markets}
-    updater = build_updater(CandleStore(cfg.db_file), names)
+    store = CandleStore(cfg.db_file)
+    if args.full:
+        for s in symbols:
+            for tf in timeframes:
+                store.delete(s, tf)
+    updater = build_updater(store, cfg.providers)
 
-    results = updater.update_many(symbols, args.timeframes or cfg.timeframes)
+    results = updater.update_many(symbols, timeframes)
 
     table = pd.DataFrame([r.model_dump() for r in results])
     table["last_candle"] = (
